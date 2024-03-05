@@ -1,0 +1,49 @@
+---
+title: "LandSat 8 Modelling"
+author: "Jody Holland"
+format: html
+editor: visual
+bibliography: lsmodelling.bib
+---
+
+## Introduction
+
+The first methodological step is to train a variety of models predicting LST using LandSat 8 at 30m resolution. This is in a similar process to [@onacillová2022]. However this study only uses linear regression. In this modelling process we employ three types of modelling approaches:
+
+-   Linear Regression
+
+-   Advanced Neural Networks[^1]
+
+-   Geographically Weighted Regression
+
+[^1]: similarly to @equere2021a; @gobakis2011
+
+Through comparing the accuracy of these models we make inferences on which is most likely to provide high utility data for use in modelling 10m resolution LST with Sentinel data as input.
+
+## Input Data
+
+To train these models, we use input data from Landsat covering and clipped to our study area of Maspalomas-Playa del Inglés. This raster data is broken down into broken down into bands from which the following can be calculated:
+
+-   LST
+
+-   NDVI
+
+-   NDBI
+
+-   NDSI (normalised difference sand index)
+
+-   Surface Albedo
+
+We will also use the following auxiliary data
+
+-   Road Proximity (from OSM)
+
+-   Rasterised Water Features (from OSM)
+
+-   Proximity to Coast/Ocean
+
+-   Elevation
+
+## Return to Main Menu
+
+[**Back to Main Menu**](index.html)
