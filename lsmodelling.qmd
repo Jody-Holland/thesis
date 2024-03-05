@@ -56,12 +56,15 @@ This methodology will use the following r packages for data wranglingusing data 
 
 -   The raster package for handling raster data [@raster-2]
 
+-   The leaflet package for interactive visualisation [@leaflet]
+
 ```{r, message=FALSE}
 # load packages
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(raster)
+library(leaflet)
 ```
 
 ## Loading Rasters
@@ -169,6 +172,19 @@ E = 0.00149 * Pv + 0.986481
 LST = Tb / ((1 + ((10.9 * (Tb / correction))) * log(E))) - 273.15
 
 plot_raster_with_label(LST, "LST")
+```
+
+## Leaflet Visualisation of LST
+
+```{r}
+pal = colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"),
+                   values(LST),
+                   na.color = "transparent")
+
+leaflet() %>% addTiles() %>%
+  addRasterImage(LST, colors = pal, opacity = 0.9) %>%
+  addLegend(pal = pal, values = values(LST),
+    title = "Surface temp")
 ```
 
 [**Back to Main Menu**](index.html)
