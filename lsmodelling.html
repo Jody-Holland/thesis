@@ -21,6 +21,40 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 /* CSS for citations */
 div.csl-bib-body { }
 div.csl-entry {
@@ -108,14 +142,152 @@ div.csl-indent {
 </ul>
 <p>We will also use the following auxiliary data</p>
 <ul>
-<li><p>Road Proximity (from OSM)</p></li>
+<li><p>Road Proximity (from OSM)<span class="citation" data-cites="raster">(<a href="#ref-raster" role="doc-biblioref">Hijmans 2023a</a>)</span></p></li>
 <li><p>Rasterised Water Features (from OSM)</p></li>
 <li><p>Proximity to Coast/Ocean</p></li>
 <li><p>Elevation</p></li>
 </ul>
 </section>
-<section id="return-to-main-menu" class="level2">
-<h2 class="anchored" data-anchor-id="return-to-main-menu">Return to Main Menu</h2>
+<section id="libraries" class="level2">
+<h2 class="anchored" data-anchor-id="libraries">Libraries</h2>
+<p>This methodology will use the following r packages for data wranglingusing data from July 24th 2023 (a day when both Sentinel and Landsat imagery coincides).</p>
+<ul>
+<li><p>dplyr for wrangling data <span class="citation" data-cites="dplyr">(<a href="#ref-dplyr" role="doc-biblioref">Wickham et al. 2023</a>)</span></p></li>
+<li><p>tidyr for managing datasets <span class="citation" data-cites="tidyr">(<a href="#ref-tidyr" role="doc-biblioref">Wickham, Vaughan, and Girlich 2024</a>)</span></p></li>
+<li><p>ggplot2 for visualisations <span class="citation" data-cites="ggplot2">(<a href="#ref-ggplot2" role="doc-biblioref">Wickham 2016</a>)</span></p></li>
+<li><p>The raster package for handling raster data <span class="citation" data-cites="raster-2">(<a href="#ref-raster-2" role="doc-biblioref">Hijmans 2023b</a>)</span></p></li>
+</ul>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># load packages</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyr)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(raster)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="loading-rasters" class="level2">
+<h2 class="anchored" data-anchor-id="loading-rasters">Loading Rasters</h2>
+<p>These rasters denote different bands of EM radiation captured by the LandSat 8 satellite over the south of Gran Canaria at 11:29am on the 24th July 2023. These bands cover most of the visible light spectrum as well as the infrared spectrum. Combined in various was they can be used to calculate various measures such as the NDVI (normalised difference vegetation index) and the LST (land surface temperature).</p>
+<p>First lets plot and load the rasters</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># load bands</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Function to plot raster with a label</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>plot_raster_with_label <span class="ot">=</span> <span class="cf">function</span>(raster, label) {</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>(raster, <span class="at">main =</span> label)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the bounding box</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>bbox <span class="ot">=</span> <span class="fu">extent</span>(<span class="fu">c</span>(<span class="fl">424070.2796</span>, <span class="fl">446179.9561</span>, <span class="fl">3067539.8684</span>, <span class="fl">3078268.5131</span>))</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Load each raster, crop to bounding box, and plot with label</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>b1 <span class="ot">=</span> <span class="fu">crop</span>(<span class="fu">raster</span>(<span class="st">"landsat/B1.TIF"</span>), bbox)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(b1, <span class="st">"Band 1"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-2-1.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>b2 <span class="ot">=</span> <span class="fu">crop</span>(<span class="fu">raster</span>(<span class="st">"landsat/B2.TIF"</span>), bbox)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(b2, <span class="st">"Band 2"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-2-2.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>b3 <span class="ot">=</span> <span class="fu">crop</span>(<span class="fu">raster</span>(<span class="st">"landsat/B3.TIF"</span>), bbox)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(b3, <span class="st">"Band 3"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-2-3.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>b4 <span class="ot">=</span> <span class="fu">crop</span>(<span class="fu">raster</span>(<span class="st">"landsat/B4.TIF"</span>), bbox)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(b4, <span class="st">"Band 4"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-2-4.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>b5 <span class="ot">=</span> <span class="fu">crop</span>(<span class="fu">raster</span>(<span class="st">"landsat/B5.TIF"</span>), bbox)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(b5, <span class="st">"Band 5"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-2-5.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>b6 <span class="ot">=</span> <span class="fu">crop</span>(<span class="fu">raster</span>(<span class="st">"landsat/B6.TIF"</span>), bbox)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(b6, <span class="st">"Band 6"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-2-6.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>b7 <span class="ot">=</span> <span class="fu">crop</span>(<span class="fu">raster</span>(<span class="st">"landsat/B7.TIF"</span>), bbox)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(b7, <span class="st">"Band 7"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-2-7.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>b10 <span class="ot">=</span> <span class="fu">crop</span>(<span class="fu">raster</span>(<span class="st">"landsat/B10.TIF"</span>), bbox)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(b10, <span class="st">"Band 10"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-2-8.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+</section>
+<section id="calculating-ndvi" class="level2">
+<h2 class="anchored" data-anchor-id="calculating-ndvi">Calculating NDVI</h2>
+<p>Perhaps the most important metric beside LST is NVDI. Following the guide produced by <span class="citation" data-cites="equere2021b">Equere et al. (<a href="#ref-equere2021b" role="doc-biblioref">2021b</a>)</span>, NDVI is also used in the computation of emissivity and ultimately LST.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>ndvi <span class="ot">=</span> (b5 <span class="sc">-</span> b4) <span class="sc">/</span> (b5 <span class="sc">+</span> b4)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(ndvi, <span class="st">"NDVI"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+</section>
+<section id="calculating-lst" class="level2">
+<h2 class="anchored" data-anchor-id="calculating-lst">Calculating LST</h2>
+<p>This bit is a bit more tricky and requires multiple steps. The first is Top of Atmospheric Pressure.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>M <span class="ot">=</span> <span class="fl">3.8000e-04</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>L <span class="ot">=</span> <span class="fl">0.10000</span>  </span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>sun_angle <span class="ot">=</span> <span class="fl">66.47251732</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>TOA <span class="ot">=</span> (<span class="fl">0.0003342</span> <span class="sc">*</span> b10 <span class="sc">+</span> <span class="fl">0.1</span>) <span class="sc">/</span> <span class="fu">sin</span>(<span class="fl">66.47251732</span> <span class="sc">*</span> pi <span class="sc">/</span> <span class="dv">180</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(TOA, <span class="st">"Brightness Temp"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-4-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<p>The second step is conversion of Radiance</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># add effective wavelength of landsat b10</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>K2 <span class="ot">=</span> <span class="fl">1329.2405</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>K1 <span class="ot">=</span> <span class="fl">799.0284</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>Tb <span class="ot">=</span> (K2 <span class="sc">/</span> (<span class="fu">log</span>(K1 <span class="sc">*</span> <span class="fl">0.95</span> <span class="sc">/</span> TOA) <span class="sc">+</span> <span class="dv">1</span>))</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(Tb, <span class="st">"Brightness Temp"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-5-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<p>The third is vegetation factor</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>Pv <span class="ot">&lt;-</span> ((ndvi <span class="sc">-</span> <span class="fu">cellStats</span>(ndvi, min)) <span class="sc">/</span> (<span class="fu">cellStats</span>(ndvi, max) <span class="sc">-</span> <span class="fu">cellStats</span>(ndvi, min)))<span class="sc">^</span><span class="dv">2</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Now LST</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Constants</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>h <span class="ot">&lt;-</span> <span class="fl">6.626e-2</span>  <span class="co"># Planck's constant</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>k <span class="ot">&lt;-</span> <span class="fl">1.38e-23</span>    <span class="co"># Boltzmann's constant</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>c <span class="ot">&lt;-</span> <span class="fl">2.998</span> <span class="sc">*</span> <span class="dv">108</span>       <span class="co"># Speed of light</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculate hc/c</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>correction <span class="ot">&lt;-</span> h <span class="sc">*</span> (c <span class="sc">/</span> k)</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Emissivity</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>E <span class="ot">=</span> <span class="fl">0.00149</span> <span class="sc">*</span> Pv <span class="sc">+</span> <span class="fl">0.986481</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="co"># atmospheric correction factor</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>LST <span class="ot">=</span> Tb <span class="sc">/</span> ((<span class="dv">1</span> <span class="sc">+</span> ((<span class="fl">10.9</span> <span class="sc">*</span> (Tb <span class="sc">/</span> correction))) <span class="sc">*</span> <span class="fu">log</span>(E))) <span class="sc">-</span> <span class="fl">273.15</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_raster_with_label</span>(LST, <span class="st">"LST"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="lsmodelling_files/figure-html/unnamed-chunk-7-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
 <p><a href="index.html"><strong>Back to Main Menu</strong></a></p>
 
 </section>
@@ -123,18 +295,36 @@ div.csl-indent {
 
 <div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" role="list">
 <div id="ref-equere2021a" class="csl-entry" role="listitem">
-Equere, Victor, Parham A. Mirzaei, Saffa Riffat, and Yilin Wang. 2021. <span>“Integration of Topological Aspect of City Terrains to Predict the Spatial Distribution of Urban Heat Island Using GIS and ANN.”</span> <em>Sustainable Cities and Society</em> 69 (June): 102825. <a href="https://doi.org/10.1016/j.scs.2021.102825">https://doi.org/10.1016/j.scs.2021.102825</a>.
+Equere, Victor, Parham A. Mirzaei, Saffa Riffat, and Yilin Wang. 2021a. <span>“Integration of Topological Aspect of City Terrains to Predict the Spatial Distribution of Urban Heat Island Using GIS and ANN.”</span> <em>Sustainable Cities and Society</em> 69 (June): 102825. <a href="https://doi.org/10.1016/j.scs.2021.102825">https://doi.org/10.1016/j.scs.2021.102825</a>.
+</div>
+<div id="ref-equere2021b" class="csl-entry" role="listitem">
+———. 2021b. <span>“Integration of Topological Aspect of City Terrains to Predict the Spatial Distribution of Urban Heat Island Using GIS and ANN.”</span> <em>Sustainable Cities and Society</em> 69 (June): 102825. <a href="https://doi.org/10.1016/j.scs.2021.102825">https://doi.org/10.1016/j.scs.2021.102825</a>.
 </div>
 <div id="ref-gobakis2011" class="csl-entry" role="listitem">
 Gobakis, K, D Kolokotsa, A Synnefa, M Saliari, K Giannopoulou, and M Santamouris. 2011. <span>“Development of a Model for Urban Heat Island Prediction Using Neural Network Techniques.”</span> <em>Sustainable Cities and Society</em> 1.
 </div>
+<div id="ref-raster" class="csl-entry" role="listitem">
+Hijmans, Robert J. 2023a. <span>“Raster: Geographic Data Analysis and Modeling.”</span> <a href="https://CRAN.R-project.org/package=raster">https://CRAN.R-project.org/package=raster</a>.
+</div>
+<div id="ref-raster-2" class="csl-entry" role="listitem">
+———. 2023b. <span>“Raster: Geographic Data Analysis and Modeling.”</span> <a href="https://CRAN.R-project.org/package=raster">https://CRAN.R-project.org/package=raster</a>.
+</div>
 <div id="ref-onacillová2022" class="csl-entry" role="listitem">
 Onačillová, Katarína, Michal Gallay, Daniel Paluba, Anna Péliová, Ondrej Tokarčík, and Daniela Laubertová. 2022. <span>“Combining Landsat 8 and Sentinel-2 Data in Google Earth Engine to Derive Higher Resolution Land Surface Temperature Maps in Urban Environment.”</span> <em>Remote Sensing</em> 14 (16): 4076. <a href="https://doi.org/10.3390/rs14164076">https://doi.org/10.3390/rs14164076</a>.
+</div>
+<div id="ref-ggplot2" class="csl-entry" role="listitem">
+Wickham, Hadley. 2016. <span>“Ggplot2: Elegant Graphics for Data Analysis.”</span> <a href="https://ggplot2.tidyverse.org">https://ggplot2.tidyverse.org</a>.
+</div>
+<div id="ref-dplyr" class="csl-entry" role="listitem">
+Wickham, Hadley, Romain François, Lionel Henry, Kirill Müller, and Davis Vaughan. 2023. <span>“Dplyr: A Grammar of Data Manipulation.”</span> <a href="https://CRAN.R-project.org/package=dplyr">https://CRAN.R-project.org/package=dplyr</a>.
+</div>
+<div id="ref-tidyr" class="csl-entry" role="listitem">
+Wickham, Hadley, Davis Vaughan, and Maximilian Girlich. 2024. <span>“Tidyr: Tidy Messy Data.”</span> <a href="https://CRAN.R-project.org/package=tidyr">https://CRAN.R-project.org/package=tidyr</a>.
 </div>
 </div></section><section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes"><h2 class="anchored quarto-appendix-heading">Footnotes</h2>
 
 <ol>
-<li id="fn1"><p>similarly to <span class="citation" data-cites="equere2021a">Equere et al. (<a href="#ref-equere2021a" role="doc-biblioref">2021</a>)</span>; <span class="citation" data-cites="gobakis2011">Gobakis et al. (<a href="#ref-gobakis2011" role="doc-biblioref">2011</a>)</span><a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn1"><p>similarly to <span class="citation" data-cites="equere2021a">Equere et al. (<a href="#ref-equere2021a" role="doc-biblioref">2021a</a>)</span>; <span class="citation" data-cites="gobakis2011">Gobakis et al. (<a href="#ref-gobakis2011" role="doc-biblioref">2011</a>)</span><a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
 </ol>
 </section></div></main>
 <!-- /main column -->

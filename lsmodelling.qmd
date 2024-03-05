@@ -36,7 +36,7 @@ To train these models, we use input data from Landsat covering and clipped to ou
 
 We will also use the following auxiliary data
 
--   Road Proximity (from OSM)
+-   Road Proximity (from OSM)[@raster]
 
 -   Rasterised Water Features (from OSM)
 
@@ -44,6 +44,131 @@ We will also use the following auxiliary data
 
 -   Elevation
 
-## Return to Main Menu
+## Libraries
+
+This methodology will use the following r packages for data wranglingusing data from July 24th 2023 (a day when both Sentinel and Landsat imagery coincides).
+
+-   dplyr for wrangling data [@dplyr]
+
+-   tidyr for managing datasets [@tidyr]
+
+-   ggplot2 for visualisations [@ggplot2]
+
+-   The raster package for handling raster data [@raster-2]
+
+```{r, message=FALSE}
+# load packages
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(raster)
+```
+
+## Loading Rasters
+
+These rasters denote different bands of EM radiation captured by the LandSat 8 satellite over the south of Gran Canaria at 11:29am on the 24th July 2023. These bands cover most of the visible light spectrum as well as the infrared spectrum. Combined in various was they can be used to calculate various measures such as the NDVI (normalised difference vegetation index) and the LST (land surface temperature).
+
+First lets plot and load the rasters
+
+```{r}
+# load bands
+# Function to plot raster with a label
+plot_raster_with_label = function(raster, label) {
+  plot(raster, main = label)
+}
+
+# Define the bounding box
+bbox = extent(c(424070.2796, 446179.9561, 3067539.8684, 3078268.5131))
+
+# Load each raster, crop to bounding box, and plot with label
+b1 = crop(raster("landsat/B1.TIF"), bbox)
+plot_raster_with_label(b1, "Band 1")
+
+b2 = crop(raster("landsat/B2.TIF"), bbox)
+plot_raster_with_label(b2, "Band 2")
+
+b3 = crop(raster("landsat/B3.TIF"), bbox)
+plot_raster_with_label(b3, "Band 3")
+
+b4 = crop(raster("landsat/B4.TIF"), bbox)
+plot_raster_with_label(b4, "Band 4")
+
+b5 = crop(raster("landsat/B5.TIF"), bbox)
+plot_raster_with_label(b5, "Band 5")
+
+b6 = crop(raster("landsat/B6.TIF"), bbox)
+plot_raster_with_label(b6, "Band 6")
+
+b7 = crop(raster("landsat/B7.TIF"), bbox)
+plot_raster_with_label(b7, "Band 7")
+
+b10 = crop(raster("landsat/B10.TIF"), bbox)
+plot_raster_with_label(b10, "Band 10")
+
+```
+
+## Calculating NDVI
+
+Perhaps the most important metric beside LST is NVDI. Following the guide produced by @equere2021b, NDVI is also used in the computation of emissivity and ultimately LST.
+
+```{r}
+ndvi = (b5 - b4) / (b5 + b4)
+
+plot_raster_with_label(ndvi, "NDVI")
+```
+
+## Calculating LST
+
+This bit is a bit more tricky and requires multiple steps. The first is Top of Atmospheric Pressure.
+
+```{r}
+
+M = 3.8000e-04
+L = 0.10000  
+sun_angle = 66.47251732
+    
+TOA = (0.0003342 * b10 + 0.1) / sin(66.47251732 * pi / 180)
+plot_raster_with_label(TOA, "Brightness Temp")
+```
+
+The second step is conversion of Radiance
+
+```{r}
+# add effective wavelength of landsat b10
+K2 = 1329.2405
+K1 = 799.0284
+
+Tb = (K2 / (log(K1 * 0.95 / TOA) + 1))
+
+plot_raster_with_label(Tb, "Brightness Temp")
+```
+
+The third is vegetation factor
+
+```{r}
+Pv <- ((ndvi - cellStats(ndvi, min)) / (cellStats(ndvi, max) - cellStats(ndvi, min)))^2
+```
+
+Now LST
+
+```{r}
+# Constants
+h <- 6.626e-2  # Planck's constant
+k <- 1.38e-23    # Boltzmann's constant
+c <- 2.998 * 108       # Speed of light
+
+# Calculate hc/c
+correction <- h * (c / k)
+
+# Emissivity
+
+E = 0.00149 * Pv + 0.986481
+
+
+# atmospheric correction factor
+LST = Tb / ((1 + ((10.9 * (Tb / correction))) * log(E))) - 273.15
+
+plot_raster_with_label(LST, "LST")
+```
 
 [**Back to Main Menu**](index.html)
