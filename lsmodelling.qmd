@@ -8,17 +8,15 @@ bibliography: lsmodelling.bib
 
 ## Introduction
 
-The first methodological step is to train a variety of models predicting LST using LandSat 8 at 30m resolution. This is in a similar process to [@onacillová2022]. However this study only uses linear regression. In this modelling process we employ three types of modelling approaches:
+The first methodological step is to train a variety of models predicting LST using LandSat 8 at 30m resolution. This is in a similar process to @onacillová2022; @equere2021; @son2017; @karyati2022. In this modelling process we employ three types of modelling approaches:
 
--   Linear Regression
+-   Linear Regression [@onacillová2022]
 
--   Advanced Neural Networks[^1]
+-   Advanced Neural Networks [@equere2021]
 
 -   Geographically Weighted Regression
 
-[^1]: similarly to @equere2021a; @gobakis2011
-
-Through comparing the accuracy of these models we make inferences on which is most likely to provide high utility data for use in modelling 10m resolution LST with Sentinel data as input.
+Through comparing the accuracy of these models we make inferences on which is most likely to provide high utility data for use in modelling 10m resolution LST with Sentinel 2 ºdata as input.
 
 ## Input Data
 
@@ -36,7 +34,7 @@ To train these models, we use input data from Landsat covering and clipped to ou
 
 We will also use the following auxiliary data
 
--   Road Proximity (from OSM)[@raster]
+-   Road Proximity (from OSM)
 
 -   Rasterised Water Features (from OSM)
 
@@ -54,7 +52,7 @@ This methodology will use the following r packages for data wranglingusing data 
 
 -   ggplot2 for visualisations [@ggplot2]
 
--   The raster package for handling raster data [@raster-2]
+-   The raster package for handling raster data [@raster]
 
 -   The leaflet package for interactive visualisation [@leaflet]
 
@@ -69,122 +67,177 @@ library(leaflet)
 
 ## Loading Rasters
 
-These rasters denote different bands of EM radiation captured by the LandSat 8 satellite over the south of Gran Canaria at 11:29am on the 24th July 2023. These bands cover most of the visible light spectrum as well as the infrared spectrum. Combined in various was they can be used to calculate various measures such as the NDVI (normalised difference vegetation index) and the LST (land surface temperature).
+These rasters denote different bands of EM radiation captured by the LandSat 8 satellite over the south of Gran Canaria at 11:29am on the 24th July 2023 [@u.s.geologicalsurey2023]. These bands cover most of the visible light spectrum as well as the infrared spectrum. Combined in various was they can be used to calculate various measures such as the NDVI (normalised difference vegetation index) and the LST (land surface temperature).
 
 First lets plot and load the rasters
 
 ```{r}
-# load bands
-# Function to plot raster with a label
+# function to plot raster with a label
 plot_raster_with_label = function(raster, label) {
-  plot(raster, main = label)
+  do.call("plot", list(raster, main = label))
 }
 
-# Define the bounding box
-bbox = extent(c(424070.2796, 446179.9561, 3067539.8684, 3078268.5131))
+# define the bounding box
+bbox = extent(c(437538.6632, 447575.9227, 3067863.0650, 3072703.0963))
 
-# Load each raster, crop to bounding box, and plot with label
+# load each raster, crop to bounding box, and plot with label
 b1 = crop(raster("landsat/B1.TIF"), bbox)
-plot_raster_with_label(b1, "Band 1")
-
 b2 = crop(raster("landsat/B2.TIF"), bbox)
-plot_raster_with_label(b2, "Band 2")
-
 b3 = crop(raster("landsat/B3.TIF"), bbox)
-plot_raster_with_label(b3, "Band 3")
-
 b4 = crop(raster("landsat/B4.TIF"), bbox)
-plot_raster_with_label(b4, "Band 4")
-
 b5 = crop(raster("landsat/B5.TIF"), bbox)
-plot_raster_with_label(b5, "Band 5")
-
 b6 = crop(raster("landsat/B6.TIF"), bbox)
-plot_raster_with_label(b6, "Band 6")
-
 b7 = crop(raster("landsat/B7.TIF"), bbox)
-plot_raster_with_label(b7, "Band 7")
-
 b10 = crop(raster("landsat/B10.TIF"), bbox)
-plot_raster_with_label(b10, "Band 10")
-
 ```
 
 ## Calculating NDVI
 
-Perhaps the most important metric beside LST is NVDI. Following the guide produced by @equere2021b, NDVI is also used in the computation of emissivity and ultimately LST.
+Perhaps the most important metric beside LST is NVDI. NDVI is also used in the computation of emissivity and ultimately therefore emissivity adjusted LST.
+
+To calculate NDVI, the following formula is used:
+
+$$
+\text{NDVI} = \frac{\text{NIR} - \text{Red}}{\text{NIR} + \text{Red}}
+$$
+
+Here $NIR$ represents the Near-Infrared band reflectance value, in Landsat 8 this is Band 5. Further $Red$ represents the Red band reflectance value, in Landsat 8 this is Band 4.
 
 ```{r}
+# calc and plot ndvi using bands 5 and 4
 ndvi = (b5 - b4) / (b5 + b4)
 
-plot_raster_with_label(ndvi, "NDVI")
+plot_raster_with_label(ndvi, expression(Normalised~Difference~Vegetation~Index~ (NDVI)))
 ```
 
 ## Calculating LST
 
-This bit is a bit more tricky and requires multiple steps. The first is Top of Atmospheric Pressure.
+Calculating LST can be straightforward in principle, using Band 10 alone of Landsat 8 data. However, this will not account for surface emissivity. Thus, for this study, an adjusted LST is calculated. The first step is to convert the Digital Numbers $DN$ in the Band 10 layer to Top of Atmosphere Spectral Radiance $L_\lambda$ values. This process uses input units found the images metadata/MLT file. These values are the RADIANCE_MULT_BAND_10 $M_L$ and the RADIANCE_ADD_BAND_10 $\text{A}_L$.
+
+Putting these together into a formula is as follows:
+
+$$
+\text{L}_\lambda = \text{M}_L · \text{DN} + \text{A}_L
+$$
 
 ```{r}
+# define metadata values
+mult_b10 = 3.8e-04
+add_b10 = 0.1
 
-M = 3.8000e-04
-L = 0.10000  
-sun_angle = 66.47251732
-    
-TOA = (0.0003342 * b10 + 0.1) / sin(66.47251732 * pi / 180)
-plot_raster_with_label(TOA, "Brightness Temp")
+# calc and plot
+l = (mult_b10 * b10 + add_b10)
+
+plot_raster_with_label(l, expression(Spectral~Radiance~(L[lambda])))
 ```
 
-The second step is conversion of Radiance
+The second step is "Conversion of Radiance to At-Sensor Temperature" [@karyati2022]. This This converts the Spectral Radiance into temperature values or Brightness Temperature $BT$ in Kelvin. This process requires two constants related to Landsat 8 Band 10's specific thermal conversion constants found again in the metadata file. These are $K1$and $K2$.
+
+Putting this together into a formula is as follows:
+
+$$
+\text{BT} = \frac{\text{K2}}{ln(\frac{\text{K1}}{\text{L}_\lambda} + 1)} 
+$$
 
 ```{r}
 # add effective wavelength of landsat b10
-K2 = 1329.2405
-K1 = 799.0284
+k1 = 799.0284
+k2 = 1329.2405
 
-Tb = (K2 / (log(K1 * 0.95 / TOA) + 1))
+# calc and plot
+bt = (k2 / log(k1 / l + 1))
 
-plot_raster_with_label(Tb, "Brightness Temp")
+plot_raster_with_label(bt, expression(Brightness~Temp~(BT))) 
 ```
 
-The third is vegetation factor
+The above metric alone could be used for study of heat distribution, however it does not account for the variation caused by surface level emissivity. Emissivity denotes how much infrared a surface will absorb or reflect, ranging from a mirror to a perfect black surface. The values of emissivity range from 0 to 1 respectively. NDVI is used to determine emissivity, through the fractional vegetation factor $\text{P}_v$. This value is specific to the region being studied.
+
+The formula for calculating fractional vegetation factor is as follows:
+
+$$
+\text{P}_v = (\frac{\text{NDVI}-\text{NDVI}_\min}{\text{NDVI}_\max - \text{NDVI}_\min})^2
+$$
 
 ```{r}
-Pv <- ((ndvi - cellStats(ndvi, min)) / (cellStats(ndvi, max) - cellStats(ndvi, min)))^2
+# calc and plot vegetation factor
+pv = ((ndvi - cellStats(ndvi, min)) / (cellStats(ndvi, max) - cellStats(ndvi, min)))^2
+
+plot_raster_with_label(pv, expression(Fractional~Vegetation~Factor~(P[v])))
 ```
 
-Now LST
+From this the surface emissivity can be calculated. This uses two constants relating to the relative emissivity of soil $\epsilon\text{s}\lambda$ and the emissivity of vegetation $\epsilon\text{v}\lambda$, as well as one surface roughness $\text{C}\lambda$ metric of 0.005
+
+The formula for estimating emissivity $\epsilon\lambda$ is thus as follows:
+
+$$
+\epsilon\lambda = \epsilon\text{v}\lambda + \epsilon\text{s}\lambda  · (1 - \text{P}_v) + \text{C}\lambda
+$$
 
 ```{r}
-# Constants
-h <- 6.626e-2  # Planck's constant
-k <- 1.38e-23    # Boltzmann's constant
-c <- 2.998 * 108       # Speed of light
+# soil emissivity
+es = 0.964
 
-# Calculate hc/c
-correction <- h * (c / k)
+# veg emissivity
+ev = 0.984
 
-# Emissivity
+# calc and plot emissivity
+e =  ev * pv + es * (1 - pv) + 0.005
 
-E = 0.00149 * Pv + 0.986481
+plot_raster_with_label(e, expression(Emissivity~(epsilon*lambda)))
+```
 
+Now most of the building blocks are in place to calculate the adjusted LST. This requires a correction constant $\rho$ that incorporates the Speed of Light $c$, Planck's constant $h$, and Boltzmann's constant $\sigma$.
 
-# atmospheric correction factor
-LST = Tb / ((1 + ((10.9 * (Tb / correction))) * log(E))) - 273.15
+The formula for this is as follows:
 
-plot_raster_with_label(LST, "LST")
+$$
+\rho = \frac{c·h}{\sigma}
+$$
+
+```{r}
+# speed of light
+c = 2.997925e8 
+
+# planck's constant
+h = 6.626070e-34
+
+# boltzmann's constant
+sigma = 1.380649e-23
+
+# calc and output correction constant/rho 
+rho = c * h / sigma
+rho
+```
+
+With these building blocks, plus the wavelength of the emitted radiance for Landsat 8 $\lambda$, the adjusted LST $\text{T}s$ can be determined using the following formula (converting from Kelvin to Celcius:
+
+$$
+\text{T}_s = \frac{\text{BT}}{1 + (\frac{\lambda\text{BT}}{\rho} · ln(\epsilon\lambda))} - 273.15
+$$
+
+```{r}
+# wavelength
+wl = 10.895e-6
+
+# calc and plot
+ts = bt / (1 + (wl * bt /  1.4388e-2) * log(e)) - 273.15
+
+plot_raster_with_label(ts, expression(Land~Surface~Temperature~(T[s])))
 ```
 
 ## Leaflet Visualisation of LST
 
+Using the Leaflet Package for R [@leaflet], we can visualise the resulting raster
+
 ```{r}
-pal = colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"),
-                   values(LST),
+pal = colorNumeric(c("#0C2C84", "#41B6C4", "red"),
+                   values(ts),
                    na.color = "transparent")
 
 leaflet() %>% addTiles() %>%
-  addRasterImage(LST, colors = pal, opacity = 0.9) %>%
-  addLegend(pal = pal, values = values(LST),
-    title = "Surface temp")
+  addRasterImage(ts, colors = pal, opacity = 0.9) %>%
+  addLegend(pal = pal, values = values(ts),
+    title = "LST (Cº)")
 ```
 
 [**Back to Main Menu**](index.html)

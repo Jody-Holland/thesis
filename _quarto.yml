@@ -1,0 +1,23 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Jody Holland Thesis"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: lsmodelling.qmd
+        text: LandSat 8 Modelling
+
+format:
+  html:
+    theme:
+      light: flatly
+      dark: darkly
+    css: styles.css
+    toc: true
+
+editor: visual
+

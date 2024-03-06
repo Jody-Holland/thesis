@@ -1,5 +1,4 @@
 ---
-title: "Mapping Urban Heat Islands on Gran Canaria using Remote Sensing"
 author: "Jody Holland"
 format: html
 editor: visual
@@ -7,6 +6,4 @@ editor: visual
 
 ## Introduction
 
-## Sections
-
-[**Landsat 8 Modelling**](lsmodelling.html)
+This is the central website for storing all the data analysis used for my thesis project examining surface temperatures within tourism areas of southern Gran Canaria in 2023.
