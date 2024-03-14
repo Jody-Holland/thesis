@@ -6,4 +6,8 @@ editor: visual
 
 ## Introduction
 
-This is the central website for storing all the data analysis used for my thesis project examining surface temperatures within tourism areas of southern Gran Canaria in 2023.
+Welcome/Bienvenido to the central repository for my thesis project, which casts a spotlight on the intersection of surface temperatures, environmental injustice, and tourism along the Southern Gran Canaria coastline. Focusing on the localities of Maspalomas and Playa del Inglés and using remote sensing data from 2023, this project queries how these mass tourism destinations are affected by and contribute to climate-related disparities.
+
+This platform serves as a comprehensive archive of the data analysis undertaken for project. Much of this is completed using R and Python, working within a GIS framework for these languages. Through innovative methodologies, this project operationalises a variety of remote sensing data sources such as the LandSat 8 sattellite and the Sentinel 2 unit to explore the distribution of surface temperatures on a micro-climate scale, juxtaposing these findings against the backdrop of local environmental justice and urban inequality concerns.
+
+![Isla de Gran Canaria (Leoncio Afonso Perez 1953)](https://archive.org/download/dr_isla-gran-canaria-9029013/9029013.jpg)
