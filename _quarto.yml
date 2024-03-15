@@ -10,6 +10,8 @@ website:
         text: Home
       - href: lsmodelling.qmd
         text: LandSat 8 Modelling
+      - href: lsmodelling_pdf.pdf
+        text: LandSat 8 Modelling PDF
 
 format:
   html:

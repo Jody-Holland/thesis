@@ -1,9 +1,14 @@
 ---
-title: "LandSat 8 Modelling"
+title: "Landsat 8 Modelling Methods"
 author: "Jody Holland"
-format: html
-editor: visual
-bibliography: lsmodelling.bib
+format:
+  pdf:
+    papersize: a4
+    toc: true
+    toc-depth: 4
+    toc-title: Contents
+    fontsize: 11pt
+    bibliography: lsmodelling.bib
 ---
 
 # Introduction
@@ -30,7 +35,7 @@ This methodology will use the following r packages for data wrangling using data
 
     -   ggplot2 for visualisations [@ggplot2]
 
--   The raster package for handling raster data [@rast]
+-   The terra package for handling raster data [@terra]
 
 -   The RColorBrewer package for colour scales [@RColorBrewer]
 
@@ -40,7 +45,9 @@ This methodology will use the following r packages for data wrangling using data
 
 -   The osmdata package for extracting coastline data [@rnaturalearth]
 
--   The modelsummary package for outputting regression results [@modelsummary]
+-   The car package for analysing regression results [@car]
+
+-   The elevatr package for extracting topological data
 
 ```{r, message=FALSE}
 # load packages
@@ -50,7 +57,7 @@ library(RColorBrewer)
 library(sf)
 library(leaflet)
 library(osmdata)
-library(modelsummary)
+library(car)
 ```
 
 # Preparing Data
@@ -91,7 +98,7 @@ plot_rast = function(raster, label, colors) {
 }
 
 # define the bounding box epsg:4083
-bbox = ext(c(437292.6282,445376.8775,3067829.6809,3072637.1023))
+bbox = ext(c(437807.3121, 461489.5356, 3067557.7221, 3081455.2224))
 
 # load each raster, crop to bounding box, and plot with label
 b1 = crop(rast("landsat/B1.TIF"), bbox)
@@ -102,19 +109,13 @@ b5 = crop(rast("landsat/B5.TIF"), bbox)
 b6 = crop(rast("landsat/B6.TIF"), bbox)
 b7 = crop(rast("landsat/B7.TIF"), bbox)
 b10 = crop(rast("landsat/B10.TIF"), bbox)
-
-# load elevation raster, resample, and crop
-strm = rast("strm/strm.tif") %>% 
-  project(crs(b1)) %>%
-  resample(b1, method = "bilinear") %>%
-  crop(bbox)
 ```
 
 ## Loading Coast Shapefile
 
 Using OSM Data to first extract a coastline of the island, this process enables such analysis as calculating distance from the coastline
 
-```{r, warning=FALSE}
+```{r}
 # query osm
 gran_canaria_query = opq(bbox = "Gran Canaria") %>%
   add_osm_feature(key = "place", value = "island") %>%
@@ -156,7 +157,6 @@ b5 = mask(b5, gran_canaria_vect)
 b6 = mask(b6, gran_canaria_vect)
 b7 = mask(b7, gran_canaria_vect)
 b10 = mask(b10, gran_canaria_vect)
-strm = mask(strm, gran_canaria_vect)
 ```
 
 ## Calculating NDVI
@@ -173,7 +173,7 @@ Here $NIR$ represents the Near-Infrared band reflectance value, in Landsat 8 thi
 
 ```{r, warning=FALSE}
 # calc and plot ndvi using bands 5 and 4
-ndvi = (b5-b4)/(b5+b4)
+ndvi = (b5 - b4) / (b5 + b4)
 
 plot_rast(ndvi,
           "Normalised Difference Vegetation Index (NDVI)",
@@ -193,7 +193,7 @@ $$
 Here $NIR$ again represents the Middle-Infrared band value, in Landsat 8 this is Band 5. Also $NIR$ again represents the Near-Infrared band value, being Landsat 8 Band 5.
 
 ```{r}
-ndbi = (b6-b5)/(b6+b5)
+ndbi = (b6 - b5) / (b6 + b5)
 
 plot_rast(ndbi,
           "Normalised Difference Built Index (NDBI)",
@@ -214,7 +214,7 @@ Here $Green$ represents the Green reflectance values, in Landsat 8 this is Band 
 
 ```{r}
 # calc and plot
-ndwi = (b3-b7)/(b3+b7)
+ndwi = (b3 - b7) / (b3 + b7)
 
 plot_rast(ndwi,
           "Normalised Difference Water Index (NDWI)",
@@ -232,9 +232,8 @@ $$
 Here $Blue$ represents the Blue reflectance values, in Landsat 8 this is Band 2. $Red$ again represents the Red band value, being Landsat 8 Band 4. $NIR$ represents the Near-Infrared values, in Landsat 8 this is Band 5. $MIR$ likewise represents the Middle-Infrared values, being Landsat 8 Band 6. Finally $SWIR$ represents the Near-Infrared values, in Landsat 8 this is Band 7.
 
 ```{r}
-
 # calc and plot
-albedo = (0.356*b2+0.0130*b4+0.373*b5+0.085*b6+0.072*b7-0.0018)/1.016
+albedo = (0.356 * b2 + 0.0130 * b4 + 0.373 * b5 + 0.085 * b6 + 0.072 * b6 - 0.0018) / 1.016
 
 plot_rast(albedo,
           expression(paste("Surface Albedo (", alpha,")")),
@@ -288,15 +287,6 @@ mtext(text="Road Distance (m)", side=3, line=2)
 
 ## Calculating Elevation
 
-As elevation is already loaded in 30m resolutionf rom the STRM project. The processing steps here are just to plot and visualise it.
-
-```{r}
-# plot
-plot_rast(strm,
-          "Elevation (m)",
-          c("green", "brown"))
-```
-
 ## Calculating LST
 
 Calculating LST can be straightforward in principle, using Band 10 alone of Landsat 8 data. However, this will not account for surface emissivity. Thus, for this study, an adjusted LST is calculated.
@@ -317,7 +307,7 @@ mult_b10 = 3.8e-04
 add_b10 = 0.1
 
 # calc and plot
-l = (mult_b10*b10+add_b10)
+l = (mult_b10 * b10 + add_b10)
 
 plot_rast(l,
           expression(Spectral~Radiance~(L[lambda])),
@@ -340,7 +330,7 @@ k1 = 799.0284
 k2 = 1329.2405
 
 # calc and plot
-bt = (k2/log(k1/l+1))
+bt = (k2 / log(k1 / l + 1))
 
 plot_rast(bt,
           expression(Brightness~Temp~(BT)),
@@ -359,7 +349,7 @@ The formula for calculating fractional vegetation factor is as follows:
 
 $$
 \text{P}_v = \left( \frac{\text{NDVI} - \text{NDVI}_{\min}}{\text{NDVI}_{\max} - \text{NDVI}_{\min}} \right)^2
-$$
+$$ Using minimum and maximum values relative to the area.
 
 ```{r}
 # define min and max ndvi
@@ -369,7 +359,7 @@ max_ndvi = global(ndvi, fun=max, na.rm=TRUE) %>%
   as.numeric()
 
 # calc and plot vegetation factor
-pv = ((ndvi-min_ndvi)/(max_ndvi-min_ndvi))^2
+pv = ((ndvi - min_ndvi) / (max_ndvi - min_ndvi))^2
 
 plot_rast(pv,
           expression(Fractional~Vegetation~Factor~(P[v])),
@@ -394,7 +384,7 @@ es = 0.964
 ev = 0.984
 
 # calc and plot emissivity
-e =  ev*pv+es*(1-pv)+0.005
+e =  ev * pv + es * (1 - pv) + 0.005
 
 plot_rast(e,
           expression(Emissivity~(epsilon*lambda)),
@@ -422,7 +412,7 @@ h = 6.626070e-34
 sigma = 1.380649e-23
 
 # calc and output correction constant/rho 
-rho = c*h/sigma
+rho = c * h / sigma
 rho
 ```
 
@@ -439,7 +429,7 @@ $$
 wl = 10.895e-6
 
 # calc and plot
-ts = bt/(1+(wl*bt/rho)*log(e))-273.15
+ts = bt / (1 + (wl * bt /  rho) * log(e)) - 273.15
 
 plot_rast(ts,
           expression(Land~Surface~Temperature~(T[s])), c("blue", "red"))
@@ -449,7 +439,7 @@ plot_rast(ts,
 
 Using the Leaflet Package for R [@leaflet], we can visualise the resulting rast
 
-```{r}
+```{r, eval = FALSE}
 plet(ts,
      col=(c("darkblue","pink")),
      legend="bottomright",
@@ -462,34 +452,14 @@ plet(ts,
 
 # Model Building
 
-Now that we have gathered the data, the next step is to develop several models to predict Land Surface Temperature based on our environmental inputs.
-
-## General Linear Model
-
-The first model is simply multivariate linear regression fitted within a OLS framework. The formula for this model is:
-
-$$
-\text{T}_{si} = a_0+a _1\text{NDVI}_i+a _2\text{NDBI}_i+a _3\text{NDWI}_i+a _4\text{Albedo}_i+a _5\text{Coast}_i+ a _6\text{Road}_i + \text{Elevation}_i + \epsilon_i
-$$
-
-Where $i$ denotes the individual 30m raster tiles and $\epsilon$ denotes the residual error not accounted for.
-
 ```{r}
-rast_stack = c(ts, ndvi, ndbi, ndwi, albedo, coastdistance, roaddistance, strm)
+rast_stack = c(ts, ndvi, ndbi, ndwi, albedo, coastdistance, roaddistance)
 
 data_df = na.omit(as.data.frame(rast_stack, xy=TRUE))
 
-names(data_df) = c("X", "Y", "LST", "NDVI", "NDBI", "NDWI", "Albedo", "CoastDistance", "RoadDistance", "Elevation")
+names(data_df) = c("X", "Y", "LST", "NDVI", "NDBI", "NDWI", "Albedo", "CoastDistance", "RoadDistance")
 
-ols = lm(LST ~ 
-           NDVI +
-           NDBI +
-           NDWI +
-           Albedo +
-           CoastDistance +
-           RoadDistance +
-           Elevation,
-         data=data_df)
+model = lm(LST ~ NDVI + NDBI + NDWI  + Albedo + CoastDistance + RoadDistance, data=data_df)
 
-modelsummary(ols, type = "html")
+summary(model)
 ```
