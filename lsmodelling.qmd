@@ -8,13 +8,11 @@ bibliography: lsmodelling.bib
 
 # Introduction
 
-The first methodological step is to train a variety of models predicting LST using LandSat 8 at 30m resolution. This is in a similar process to @onacillová2022; @equere2021; @son2017; @karyati2022. In this modelling process we employ three types of modelling approaches:
+The first methodological step is to train a variety of models predicting LST using LandSat 8 at 30m resolution. This is in a similar process to @onacillová2022; @equere2021; @son2017; @karyati2022. In this modelling process we employ two families of modelling approaches:
 
 -   Linear Regression [@onacillová2022]
 
--   Advanced Neural Networks [@equere2021]
-
--   Geographically Weighted Regression
+-   Neural Networks [@equere2021]
 
 Through comparing the accuracy of these models we make inferences on which is most likely to provide high utility data for use in modelling 10m resolution LST with Sentinel 2 data as an input.
 
@@ -30,7 +28,7 @@ This methodology will use the following r packages for data wrangling using data
 
     -   ggplot2 for visualisations [@ggplot2]
 
--   The raster package for handling raster data [@rast]
+-   The terra package for handling raster data [@terra-2]
 
 -   The RColorBrewer package for colour scales [@RColorBrewer]
 
@@ -42,6 +40,8 @@ This methodology will use the following r packages for data wrangling using data
 
 -   The modelsummary package for outputting regression results [@modelsummary]
 
+-   The ggnewscale package for help with layered plots [@ggnewscale]
+
 ```{r, message=FALSE}
 # load packages
 library(tidyverse)
@@ -51,6 +51,8 @@ library(sf)
 library(leaflet)
 library(osmdata)
 library(modelsummary)
+library(ggnewscale)
+library(nnet)
 ```
 
 # Preparing Data
@@ -133,7 +135,10 @@ Again using OSM data, it is possible to extract road data in the form of a spati
 
 ```{r}
 # define bbox
-bbox_osm = c(-15.630970,27.730945,-15.391159,27.857290)
+bbox_osm = c(-15.636205673397361,
+             27.73337624747081,
+             -15.554409027542757,
+             27.777126576546703)
 
 # query osm
 osm_roads = opq(bbox = bbox_osm) %>%
@@ -143,6 +148,36 @@ osm_roads = opq(bbox = bbox_osm) %>%
 # extract road lines
 roads_vect = st_transform(osm_roads$osm_lines, crs(b1)) %>%
   vect()
+```
+
+## Loading Tourism Shapefile
+
+```{r}
+# query osm
+osm_tourism = opq(bbox = bbox_osm) %>%
+  add_osm_feature(key = "tourism") %>%
+  osmdata_sf()
+
+# extract tourism points
+tourism_vect = st_transform(osm_tourism$osm_points, crs(b1)) %>%
+  vect()
+
+plot(tourism_vect)
+```
+
+## Loading Building Shapefile
+
+```{r}
+# query osm
+osm_building = opq(bbox = bbox_osm) %>%
+  add_osm_feature(key = "building") %>%
+  osmdata_sf()
+
+# extract building polygons
+building_vect = st_transform(osm_building$osm_polygons, crs(b1)) %>%
+  vect()
+
+plot(building_vect)
 ```
 
 ## Masking Ocean Values
@@ -191,6 +226,8 @@ $$
 $$
 
 Here $NIR$ again represents the Middle-Infrared band value, in Landsat 8 this is Band 5. Also $NIR$ again represents the Near-Infrared band value, being Landsat 8 Band 5.
+
+However, we may not use this as for arid areas it has reduced efficacy. Instead we may rasterise OSM building data.
 
 ```{r}
 ndbi = (b6-b5)/(b6+b5)
@@ -261,15 +298,15 @@ sea_mask = rasterize(gran_canaria_vect,
 
 # calc distance and plot
 coastdistance = distance(sea_mask) %>%
-  mask(gran_canaria_vect)
+  mask(gran_canaria_vect) / 1000
 terra::plot(coastdistance, col = hcl.colors(100))
 plot(gran_canaria_vect, add = TRUE)
-mtext(text="Coastal Distance (m)", side=3, line=2)
+mtext(text="Coastal Distance (km)", side=3, line=2)
 ```
 
-## Calculating Distance from Roads
+## Calculating Road Heatmap
 
-Furthermore, there is distance from the nearest road, again calculated using OSM coastline data.
+Furthermore, there is distance from the nearest road, again calculated using OSM data.
 
 ```{r}
 # create road raster
@@ -278,17 +315,74 @@ road_mask = rasterize(roads_vect,
                       1,
                       background=NA)
 
-# calc distance and plot
-roaddistance = distance(road_mask) %>%
-  mask(gran_canaria_vect)
-plot(roaddistance, col = hcl.colors(100))
+road_kernal = focalMat(road_mask, 100, "Gauss")
+road_heat = focal(road_mask, road_kernal,
+                  fun = sum, na.rm = TRUE)
+road_heat[is.na(road_heat)] = 0
+road_heat = road_heat %>%
+  mask(gran_canaria_vect) %>%
+  scale()
+
+plot(road_heat)
 plot(gran_canaria_vect, add = TRUE)
-mtext(text="Road Distance (m)", side=3, line=2)
+plot(building_vect, add = TRUE)
+mtext(text="Road Exposure", side=3, line=2)
+```
+
+## Calculating Tourism Exposure
+
+Furthermore, there the effect of exposure to tourism, modelled here using a heatmap, again calculated using OSM data.
+
+```{r}
+# create tourism raster
+tourism_mask = rasterize(tourism_vect,
+                         template,
+                         1,
+                         background=NA)
+
+# create heatmap
+tourism_kernal = focalMat(tourism_mask, 200, "Gauss")
+tourism_heat = focal(tourism_mask, tourism_kernal, 
+                     fun = sum, na.rm = TRUE) 
+tourism_heat[is.na(tourism_heat)] = 0
+tourism_heat = tourism_heat %>%
+  mask(gran_canaria_vect) %>%
+  scale()
+
+# plot
+plot(tourism_heat)
+plot(gran_canaria_vect, add = TRUE)
+plot(building_vect, add = TRUE)
+mtext(text="Tourism Exposure", side=3, line=2)
+```
+
+## Calculating Building Footprint Heatmap
+
+```{r}
+# create buidling raster
+building_mask = rasterize(building_vect,
+                          template,
+                          1,
+                          background=NA)
+
+# create heatmap
+building_kernal = focalMat(building_mask, 199, "Gauss")
+building_heat = focal(building_mask, building_kernal,
+                      fun = sum, na.rm = TRUE) 
+building_heat[is.na(building_heat)] = 0
+building_heat = building_heat %>%
+  mask(gran_canaria_vect) %>%
+  scale()
+
+plot(building_heat)
+plot(gran_canaria_vect, add = TRUE)
+plot(building_vect, add = TRUE)
+mtext(text="Building Concentration", side=3, line=2)
 ```
 
 ## Calculating Elevation
 
-As elevation is already loaded in 30m resolutionf rom the STRM project. The processing steps here are just to plot and visualise it.
+As elevation is already loaded in 30m resolution the STRM project. The processing steps here are just to plot and visualise it.
 
 ```{r}
 # plot
@@ -464,32 +558,354 @@ plet(ts,
 
 Now that we have gathered the data, the next step is to develop several models to predict Land Surface Temperature based on our environmental inputs.
 
-## General Linear Model
+## General Linear Models
 
-The first model is simply multivariate linear regression fitted within a OLS framework. The formula for this model is:
+The first GLM model is simply multivariate linear regression fitted within a OLS framework.
+
+### Fitting the Model
+
+The formula for this model is:
 
 $$
-\text{T}_{si} = a_0+a _1\text{NDVI}_i+a _2\text{NDBI}_i+a _3\text{NDWI}_i+a _4\text{Albedo}_i+a _5\text{Coast}_i+ a _6\text{Road}_i + \text{Elevation}_i + \epsilon_i
+\text{T}_{si} = a_0+a _1\text{Tourism}_i+a _2\text{Buildings}_i+a _3\text{NDVI}_i+a _4\text{NDWI}_i+a _5\text{Coast}_i + a _6\text{Elevation}_i + \epsilon_i
 $$
 
 Where $i$ denotes the individual 30m raster tiles and $\epsilon$ denotes the residual error not accounted for.
 
+Also, there is analysis of a potential interaction effect between tourism distance and NDBI, as the types of built up area may vary as we move from a tourism heavy area, thus also adding the following term to the OLS function.
+
+$$
+a_7\text{Tourism · NDVI}
+$$
+
+We will run these models at all levels of building concentration and only at the high concentrations of buildings (\>2)
+
 ```{r}
-rast_stack = c(ts, ndvi, ndbi, ndwi, albedo, coastdistance, roaddistance, strm)
+rast_stack = c(ts, ndvi, ndwi, coastdistance, scale(albedo),
+               tourism_heat, building_heat, strm)
 
 data_df = na.omit(as.data.frame(rast_stack, xy=TRUE))
 
-names(data_df) = c("X", "Y", "LST", "NDVI", "NDBI", "NDWI", "Albedo", "CoastDistance", "RoadDistance", "Elevation")
+names(data_df) = c("X", "Y", 
+                   "LST", "NDVI", "NDWI", "CoastDistance",
+                   "Albedo", "TourismExposure",
+                   "BuildingExposure", "Elevation")
 
-ols = lm(LST ~ 
-           NDVI +
-           NDBI +
-           NDWI +
-           Albedo +
-           CoastDistance +
-           RoadDistance +
-           Elevation,
-         data=data_df)
+# define high density
+hd_data_df = data_df %>% filter(BuildingExposure > 0.5)
 
-modelsummary(ols, type = "html")
+# compute models
+ols_models = list(
+  "OLS 1" = lm(LST ~ 
+               TourismExposure +
+               BuildingExposure +
+               Albedo +
+               NDVI +
+               NDWI +
+               CoastDistance +
+               Elevation,
+             data=data_df),
+  "OLS 2 (Interaction)" = lm(LST ~                                                                                TourismExposure*BuildingExposure +
+                             Albedo +
+                             NDVI +
+                             NDWI +
+                             CoastDistance +
+                             Elevation,
+                           data=data_df),
+  "OLS 3 (High Density)" = lm(LST ~ 
+                              TourismExposure +
+                              BuildingExposure +
+                              Albedo +  
+                              NDVI +
+                              NDWI +
+                              CoastDistance +
+                              Elevation,
+                             data=hd_data_df),
+  "OLS 4 (High Density, Interaction)" = lm(LST ~                                                                                TourismExposure*BuildingExposure +
+                                           Albedo +    
+                                           NDVI +
+                                           NDWI +
+                                           CoastDistance +
+                                           Elevation,
+                                          data=hd_data_df))
+
+modelsummary(ols_models, stars = TRUE)
+```
+
+### Plot Fit
+
+```{r}
+# all building concentrations 
+tourism_area = tibble(
+  TourismExposure = 2,
+  NDVI = mean(data_df$NDVI),
+  BuildingExposure = seq(min(data_df$BuildingExposure),
+                         max(data_df$BuildingExposure),
+                         by = 0.05),
+  Albedo = mean(data_df$Albedo),
+  NDWI = mean(data_df$NDWI),
+  CoastDistance = mean(data_df$CoastDistance),
+  Elevation = mean(data_df$Elevation)
+)
+
+residence_area = tibble(
+  TourismExposure = -0.6,
+  NDVI = mean(data_df$NDVI),
+  BuildingExposure = seq(min(data_df$BuildingExposure),
+                         max(data_df$BuildingExposure),
+                         by = 0.05),
+  Albedo = mean(data_df$Albedo),
+  NDWI = mean(data_df$NDWI),
+  CoastDistance = mean(data_df$CoastDistance),
+  Elevation = mean(data_df$Elevation)
+)
+
+# bind together
+scenario = rbind(tourism_area, residence_area)
+
+# predict values
+area_predictions = predict(
+  ols_models$`OLS 2`,
+  newdata = scenario,
+  se.fit = TRUE,
+  interval = "confidence"
+)
+
+# make tibble
+area_predictions = area_predictions$fit %>% 
+  as_tibble()
+
+# make toplot
+toplot = bind_cols(scenario,
+                   area_predictions)
+
+toplot = select(toplot, c("fit", "lwr", "upr",
+                          "BuildingExposure",
+                          "TourismExposure"))
+
+toplot$area = ifelse(toplot$TourismExposure == -0.6, "Residence",
+                     "Tourist")
+
+# plot all density
+
+all_density_plot = ggplot() +
+  geom_line(data = toplot,
+            aes(x = BuildingExposure,
+                y = fit,
+                colour = area),
+            alpha = 2) +
+  scale_colour_manual(values = c("Residence" = "blue", "Tourist" = "red"),
+                      name = "Area Type") +
+  new_scale_color() +
+  geom_point(data = data_df,
+             aes(x = BuildingExposure,
+                 y = LST,
+                 colour = TourismExposure),
+             alpha = 0.02) +
+  scale_color_viridis_c(name = "Tourism Concentration") +
+  labs(title = "Effects of Building Concentration on Land Surface Temperature",
+       subtitle = "All Building Concentrations,
+Maspalomas/Playa del Inglés region of Gran Canaria",
+       caption = "Model Based on LandSat Imagery from 27th July 2023",
+       x = "Building Concentration Index",
+       y = "Predicted Land Surface Temperature ºC")
+
+all_density_plot
+```
+
+```{r}
+# hd building concentrations 
+hd_tourism_area = tibble(
+  TourismExposure = 4,
+  NDVI = mean(hd_data_df$NDVI),
+  BuildingExposure = seq(0.5, 
+                        max(hd_data_df$BuildingExposure),
+                        by = 0.05),
+  Albedo = mean(data_df$Albedo),
+  NDWI = mean(hd_data_df$NDWI),
+  CoastDistance = mean(hd_data_df$CoastDistance),
+  Elevation = mean(hd_data_df$Elevation)
+)
+
+hd_residence_area = tibble(
+  TourismExposure = -0.6,
+  NDVI = mean(hd_data_df$NDVI),
+  BuildingExposure = seq(0.5, 
+                        max(hd_data_df$BuildingExposure),
+                        by = 0.05),
+  Albedo = mean(data_df$Albedo),
+  NDWI = mean(hd_data_df$NDWI),
+  CoastDistance = mean(hd_data_df$CoastDistance),
+  Elevation = mean(hd_data_df$Elevation)
+)
+
+# bind together
+hd_scenario = rbind(hd_tourism_area, hd_residence_area)
+
+# predict values
+hd_area_predictions = predict(
+  ols_models$`OLS 4`,
+  newdata = hd_scenario,
+  se.fit = TRUE,
+  interval = "confidence"
+)
+
+# make tibble
+hd_area_predictions = hd_area_predictions$fit %>% 
+  as_tibble()
+
+# make toplot
+hd_toplot = bind_cols(hd_scenario,
+                      hd_area_predictions)
+hd_toplot = select(hd_toplot, c("fit", "lwr", "upr",
+                                "BuildingExposure",
+                                "TourismExposure"))
+hd_toplot$area = ifelse(hd_toplot$TourismExposure == -0.6, "Residence",
+                        "Tourist")
+# plot all density
+hd_density_plot = ggplot() +
+  geom_line(data = hd_toplot,
+            aes(x = BuildingExposure,
+                y = fit,
+                colour = area),
+            alpha = 2) +
+  scale_colour_manual(values = c("Residence" = "blue", "Tourist" = "red"),
+                      name = "Area Type") +
+  new_scale_colour() +
+  geom_point(data = hd_data_df,
+             aes(x = BuildingExposure,
+                 y = LST,
+                 colour = TourismExposure),
+             alpha = 0.02) +
+  scale_colour_viridis_c(name = "Tourism Concentration") +
+  labs(title = "Effects of Building Concentration on Land Surface Temperature",
+       subtitle = "High Building Concentrations,
+Maspalomas/Playa del Inglés region of Gran Canaria",
+       caption = "Model Based on LandSat Imagery from 27th July 2023",
+       x = "Building Concentration Index",
+       y = "Predicted Land Surface Temperature ºC")
+
+hd_density_plot
+```
+
+## Single Layer Neural Network
+
+The second model is a straightforward single layer neural network using the nnet package [@nnet]. This is slightly different from the work of @equere2021, who use two hidden layers. The steps for building this model are as follows:
+
+### Normalise the Data
+
+It is best practice to scale all the values in our dataset $X$ to be ranged from -1 to 1. This is achieved with the standard normalisation algorithm.
+
+$$
+X_{\text{scaled}} = \frac{x - X_{\text{min}}}{X_{\text{max}} - X_{\text{min}}}
+$$
+
+```{r}
+# normalize your data
+maxs = apply(data_df, 2, max) 
+mins = apply(data_df, 2, min)
+scaled_data_df = as.data.frame(scale(data_df,
+                                     center = mins,
+                                     scale = maxs - mins))
+```
+
+### Data Splitting
+
+Next it is important to split the data in to train $X_{\text{train}}$ and test $X_{\text{test}}$ sets. One for building the model and one for testing its fit. This split is on an 80:20 ratio respectively.
+
+```{r}
+# split the data 
+set.seed(1999) # my year of birth
+indexes = sample(1:nrow(scaled_data_df),
+                 size = 0.8 * nrow(scaled_data_df))
+# use index to split
+train_data = scaled_data_df[indexes, ]
+test_data = scaled_data_df[-indexes, ]
+```
+
+### Fitting the Model
+
+To fit the model we first define it as a method to determine LST $T_s$ as a function of the input data $X$ utilsing a set of weights $W$ and biases $b$.
+
+$$
+T_s = f(X; W, b)
+$$
+
+```{r}
+# define the model
+formula = LST ~
+  NDVI +
+  BuildingExposure +
+  NDWI +
+  CoastDistance +
+#  RoadExposure +
+  TourismExposure +
+  Elevation
+```
+
+The model is defined as having one hidden layer and thus two activation steps. The first step is defining inital weights $W^{[1]}$ and biases $b^{[1]}$ to take the input layer to the hidden layer $Z^{[1]}$.
+
+$$
+Z^{[1]} = W^{[1]}X + b^{[1]}
+$$
+
+This is is then put into an initial activation function $g^{[1]}$ in the hidden layer to get the first activation $A^{[1]}$ $$
+A^{[1]} = g^{[1]}(Z^{[1]})
+$$
+
+Next this hidden layer activation has applied to it another set of defined weights $W^{[2]}$ and biases $b^{[2]}$ to reach our predicted output $\hat{T_s}$
+
+$$
+\hat{T_s} = W^{[2]}A^{[1]} + b^{[2]} 
+$$
+
+```{r}
+# model has 4 neurons on hidden layer, decay of 0.00004 to prevent overfitting, and 200 iterations
+model = nnet(formula,
+             data=train_data,
+             size=4,
+             linout=TRUE, 
+             decay=5e-4, 
+             maxit=250)
+```
+
+### Testing Fit and Predictive Ability
+
+Using the $X_\text{test}$ dataset we can also see the fit of the model and test its predictive ability.
+
+```{r}
+# make predictions and test with actuals
+predictions = predict(model,
+                      newdata=test_data[, -which(names(test_data) == "LST")])
+
+actuals = test_data$LST # actual values
+mse = mean((predictions - actuals)^2)
+rmse = sqrt(mse)
+
+cat("MSE:", mse, "\n")
+cat("RMSE:", rmse, "\n")
+
+# calc r squared
+SST = sum((actuals - mean(actuals))^2)
+SSR = sum((predictions - actuals)^2)
+r_squared = 1 - (SSR/SST)
+cat("R^2:", r_squared, "\n")
+```
+
+### Plot Fit
+
+We can also plot the fit of the model as a bivariate line graph between predictions and actuals, reversing the normalising first.
+
+```{r}
+# reverse norm
+max_LST = max(data_df$LST)
+min_LST = min(data_df$LST)
+
+predictions_original = predictions * (max_LST - min_LST) + min_LST
+actuals_original = actuals * (max_LST - min_LST) + min_LST
+
+# plot
+plot(actuals_original, predictions_original, xlab = "Actual", ylab = "Predicted",
+     main = "Predicted vs. Actual Values")
+abline(0, 1)
 ```
