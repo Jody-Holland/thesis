@@ -21,7 +21,26 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
-</style>
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
 
 
 <script src="site_libs/quarto-nav/quarto-nav.js"></script>
@@ -88,13 +107,44 @@ ul.task-list li input[type="checkbox"] {
  <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./lsmodelling.html" rel="" target="">
- <span class="menu-text">LandSat 8 Modelling</span></a>
+    <a class="nav-link" href="./modelling.html" rel="" target="">
+ <span class="menu-text">Statistical Modelling</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./lsmodelling_pdf.pdf" rel="" target="">
- <span class="menu-text">LandSat 8 Modelling PDF</span></a>
+    <a class="nav-link" href="./control_variables.html" rel="" target="">
+ <span class="menu-text">Control Variables</span></a>
   </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-monthly-lst" role="button" data-bs-toggle="dropdown" aria-expanded="false" rel="" target="">
+ <span class="menu-text">Monthly LST</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-monthly-lst">    
+        <li>
+    <a class="dropdown-item" href="./lsjanuary.html" rel="" target="">
+ <span class="dropdown-text">January</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./lsmarch.html" rel="" target="">
+ <span class="dropdown-text">March</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./lsmay.html" rel="" target="">
+ <span class="dropdown-text">May</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./lsjuly.html" rel="" target="">
+ <span class="dropdown-text">July</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./lsseptember.html" rel="" target="">
+ <span class="dropdown-text">September</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./lsnovember.html" rel="" target="">
+ <span class="dropdown-text">November</span></a>
+  </li>  
+    </ul>
+  </li>
 </ul>
             <div class="quarto-navbar-tools ms-auto">
   <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Toggle dark mode"><i class="bi"></i></a>
@@ -113,6 +163,8 @@ ul.task-list li input[type="checkbox"] {
    
   <ul>
   <li><a href="#introduction" id="toc-introduction" class="nav-link active" data-scroll-target="#introduction">Introduction</a></li>
+  <li><a href="#preparing-data" id="toc-preparing-data" class="nav-link" data-scroll-target="#preparing-data">Preparing Data</a></li>
+  <li><a href="#libraries" id="toc-libraries" class="nav-link" data-scroll-target="#libraries">Libraries</a></li>
   </ul>
 </nav>
     </div>
@@ -121,21 +173,87 @@ ul.task-list li input[type="checkbox"] {
 
 
 
-<section id="introduction" class="level2">
-<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<section id="introduction" class="level1">
+<h1>Introduction</h1>
 <p>Welcome/Bienvenido to the central repository for my thesis project, which casts a spotlight on the intersection of surface temperatures, environmental injustice, and tourism along the Southern Gran Canaria coastline. Focusing on the localities of Maspalomas and Playa del Inglés and using remote sensing data from 2023, this project queries how these mass tourism destinations are affected by and contribute to climate-related disparities.</p>
-<p>This platform serves as a comprehensive archive of the data analysis undertaken for project. Much of this is completed using R and Python, working within a GIS framework for these languages. Through innovative methodologies, this project operationalises a variety of remote sensing data sources such as the LandSat 8 sattellite and the Sentinel 2 unit to explore the distribution of surface temperatures on a micro-climate scale, juxtaposing these findings against the backdrop of local environmental justice and urban inequality concerns.</p>
-<div class="quarto-figure quarto-figure-center">
-<figure class="figure">
-<p><img src="https://archive.org/download/dr_isla-gran-canaria-9029013/9029013.jpg" class="img-fluid figure-img"></p>
-<figcaption class="figure-caption">Isla de Gran Canaria (Leoncio Afonso Perez 1953)</figcaption>
-</figure>
-</div>
+<p>This platform serves as a comprehensive archive of the data analysis undertaken for project. Much of this is completed using R and Python, working within a GIS framework for these languages. Through innovative methodologies, this project operationalises a variety of remote sensing data sources from the LandSat 8 satellite to explore the distribution of surface temperatures on a micro-climate scale, juxtaposing these findings against the backdrop of local environmental justice and urban inequality concerns.</p>
+</section>
+<section id="preparing-data" class="level1">
+<h1>Preparing Data</h1>
+<p>For this analysis, I aim use the following input data covering and clipped to the study area of Maspalomas-Playa del Inglés.</p>
+<ul>
+<li><p>LST</p></li>
+<li><p>NDVI (normalised difference vegetation index)</p></li>
+<li><p>NDBI (normalised difference built-up index)</p></li>
+<li><p>NDWI (normalised difference water index)</p></li>
+<li><p>NDSI (normalised difference sand index)</p></li>
+<li><p>Surface Albedo</p></li>
+</ul>
+<p>We will also use the following auxiliary data</p>
+<ul>
+<li><p>Road Proximity (from OSM)</p></li>
+<li><p>Proximity to Coast/Ocean</p></li>
+<li><p>Elevation</p></li>
+</ul>
+</section>
+<section id="libraries" class="level1">
+<h1>Libraries</h1>
+<p>This methodology will use the following R packages for data wrangling using data from July 24th 2023 (a day when both Sentinel and Landsat imagery coincides).</p>
+<ul>
+<li><p>The tidyverse family of packages <span class="citation" data-cites="tidyverse">(<a href="#ref-tidyverse" role="doc-biblioref">Wickham et al. 2019</a>)</span>, which includes</p>
+<ul>
+<li><p>dplyr for wrangling data <span class="citation" data-cites="dplyr">(<a href="#ref-dplyr" role="doc-biblioref">Wickham et al. 2023</a>)</span></p></li>
+<li><p>tidyr for managing data sets <span class="citation" data-cites="tidyr">(<a href="#ref-tidyr" role="doc-biblioref">Wickham, Vaughan, and Girlich 2024</a>)</span></p></li>
+<li><p>ggplot2 for visualisations <span class="citation" data-cites="ggplot2">(<a href="#ref-ggplot2" role="doc-biblioref">Wickham 2016</a>)</span></p></li>
+</ul></li>
+<li><p>The terra package for handling raster data <span class="citation" data-cites="terra-2">(<a href="#ref-terra-2" role="doc-biblioref">Hijmans 2024</a>)</span></p></li>
+<li><p>The RColorBrewer package for colour scales <span class="citation" data-cites="RColorBrewer">(<a href="#ref-RColorBrewer" role="doc-biblioref">Neuwirth 2022</a>)</span></p></li>
+<li><p>The sf package for handling shapefile data <span class="citation" data-cites="sf">(<a href="#ref-sf" role="doc-biblioref">Pebesma and Bivand 2023</a>)</span></p></li>
+<li><p>The leaflet package for interactive visualisation <span class="citation" data-cites="leaflet">(<a href="#ref-leaflet" role="doc-biblioref">Cheng et al. 2023</a>)</span></p></li>
+<li><p>The osmdata package for extracting coastline data <span class="citation" data-cites="rnaturalearth">(<a href="#ref-rnaturalearth" role="doc-biblioref">Massicotte and South 2023</a>)</span></p></li>
+<li><p>The modelsummary package for outputting regression results <span class="citation" data-cites="modelsummary">(<a href="#ref-modelsummary" role="doc-biblioref">Arel-Bundock 2022</a>)</span></p></li>
+<li><p>The ggnewscale package for help with layered plots <span class="citation" data-cites="ggnewscale">(<a href="#ref-ggnewscale" role="doc-biblioref">Campitelli 2024</a>)</span></p></li>
+</ul>
+
 
 
 </section>
 
-</main> <!-- /main -->
+<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-modelsummary" class="csl-entry" role="listitem">
+Arel-Bundock, Vincent. 2022. <span>“<span></span>Modelsummary<span></span>: Data and Model Summaries in <span></span>r<span></span>”</span> 103. <a href="https://doi.org/10.18637/jss.v103.i01">https://doi.org/10.18637/jss.v103.i01</a>.
+</div>
+<div id="ref-ggnewscale" class="csl-entry" role="listitem">
+Campitelli, Elio. 2024. <span>“Ggnewscale: Multiple Fill and Colour Scales in ’Ggplot2’.”</span> <a href="https://CRAN.R-project.org/package=ggnewscale">https://CRAN.R-project.org/package=ggnewscale</a>.
+</div>
+<div id="ref-leaflet" class="csl-entry" role="listitem">
+Cheng, Joe, Barret Schloerke, Bhaskar Karambelkar, and Yihui Xie. 2023. <span>“Leaflet: Create Interactive Web Maps with the JavaScript ’Leaflet’ Library.”</span> <a href="https://CRAN.R-project.org/package=leaflet">https://CRAN.R-project.org/package=leaflet</a>.
+</div>
+<div id="ref-terra-2" class="csl-entry" role="listitem">
+Hijmans, Robert J. 2024. <span>“Terra: Spatial Data Analysis.”</span> <a href="https://CRAN.R-project.org/package=terra">https://CRAN.R-project.org/package=terra</a>.
+</div>
+<div id="ref-rnaturalearth" class="csl-entry" role="listitem">
+Massicotte, Philippe, and Andy South. 2023. <span>“Rnaturalearth: World Map Data from Natural Earth.”</span> <a href="https://CRAN.R-project.org/package=rnaturalearth">https://CRAN.R-project.org/package=rnaturalearth</a>.
+</div>
+<div id="ref-RColorBrewer" class="csl-entry" role="listitem">
+Neuwirth, Erich. 2022. <span>“RColorBrewer: ColorBrewer Palettes.”</span> <a href="https://CRAN.R-project.org/package=RColorBrewer">https://CRAN.R-project.org/package=RColorBrewer</a>.
+</div>
+<div id="ref-sf" class="csl-entry" role="listitem">
+Pebesma, Edzer, and Roger Bivand. 2023. <span>“<span></span>Spatial Data Science: With Applications in r<span></span>.”</span> <a href="https://doi.org/10.1201/9780429459016">https://doi.org/10.1201/9780429459016</a>.
+</div>
+<div id="ref-ggplot2" class="csl-entry" role="listitem">
+Wickham, Hadley. 2016. <span>“Ggplot2: Elegant Graphics for Data Analysis.”</span> <a href="https://ggplot2.tidyverse.org">https://ggplot2.tidyverse.org</a>.
+</div>
+<div id="ref-tidyverse" class="csl-entry" role="listitem">
+Wickham, Hadley, Mara Averick, Jennifer Bryan, Winston Chang, Lucy D’Agostino McGowan, Romain François, Garrett Grolemund, et al. 2019. <span>“Welcome to the <span></span>Tidyverse<span></span>”</span> 4: 1686. <a href="https://doi.org/10.21105/joss.01686">https://doi.org/10.21105/joss.01686</a>.
+</div>
+<div id="ref-dplyr" class="csl-entry" role="listitem">
+Wickham, Hadley, Romain François, Lionel Henry, Kirill Müller, and Davis Vaughan. 2023. <span>“Dplyr: A Grammar of Data Manipulation.”</span> <a href="https://CRAN.R-project.org/package=dplyr">https://CRAN.R-project.org/package=dplyr</a>.
+</div>
+<div id="ref-tidyr" class="csl-entry" role="listitem">
+Wickham, Hadley, Davis Vaughan, and Maximilian Girlich. 2024. <span>“Tidyr: Tidy Messy Data.”</span> <a href="https://CRAN.R-project.org/package=tidyr">https://CRAN.R-project.org/package=tidyr</a>.
+</div>
+</div></section></div></main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
 window.document.addEventListener("DOMContentLoaded", function (event) {
   const toggleBodyColorMode = (bsSheetEl) => {

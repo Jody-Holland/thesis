@@ -2,12 +2,61 @@
 author: "Jody Holland"
 format: html
 editor: visual
+bibliography: lsmodelling.bib
 ---
 
-## Introduction
+# Introduction
 
 Welcome/Bienvenido to the central repository for my thesis project, which casts a spotlight on the intersection of surface temperatures, environmental injustice, and tourism along the Southern Gran Canaria coastline. Focusing on the localities of Maspalomas and Playa del Inglés and using remote sensing data from 2023, this project queries how these mass tourism destinations are affected by and contribute to climate-related disparities.
 
-This platform serves as a comprehensive archive of the data analysis undertaken for project. Much of this is completed using R and Python, working within a GIS framework for these languages. Through innovative methodologies, this project operationalises a variety of remote sensing data sources such as the LandSat 8 sattellite and the Sentinel 2 unit to explore the distribution of surface temperatures on a micro-climate scale, juxtaposing these findings against the backdrop of local environmental justice and urban inequality concerns.
+This platform serves as a comprehensive archive of the data analysis undertaken for project. Much of this is completed using R and Python, working within a GIS framework for these languages. Through innovative methodologies, this project operationalises a variety of remote sensing data sources from the LandSat 8 satellite to explore the distribution of surface temperatures on a micro-climate scale, juxtaposing these findings against the backdrop of local environmental justice and urban inequality concerns.
 
-![Isla de Gran Canaria (Leoncio Afonso Perez 1953)](https://archive.org/download/dr_isla-gran-canaria-9029013/9029013.jpg)
+# Preparing Data
+
+For this analysis, I aim use the following input data covering and clipped to the study area of Maspalomas-Playa del Inglés.
+
+-   LST
+
+-   NDVI (normalised difference vegetation index)
+
+-   NDBI (normalised difference built-up index)
+
+-   NDWI (normalised difference water index)
+
+-   NDSI (normalised difference sand index)
+
+-   Surface Albedo
+
+We will also use the following auxiliary data
+
+-   Road Proximity (from OSM)
+
+-   Proximity to Coast/Ocean
+
+-   Elevation
+
+# Libraries
+
+This methodology will use the following R packages for data wrangling using data from July 24th 2023 (a day when both Sentinel and Landsat imagery coincides).
+
+-   The tidyverse family of packages [@tidyverse], which includes
+
+    -   dplyr for wrangling data [@dplyr]
+
+    -   tidyr for managing data sets [@tidyr]
+
+    -   ggplot2 for visualisations [@ggplot2]
+
+-   The terra package for handling raster data [@terra-2]
+
+-   The RColorBrewer package for colour scales [@RColorBrewer]
+
+-   The sf package for handling shapefile data [@sf]
+
+-   The leaflet package for interactive visualisation [@leaflet]
+
+-   The osmdata package for extracting coastline data [@rnaturalearth]
+
+-   The modelsummary package for outputting regression results [@modelsummary]
+
+-   The ggnewscale package for help with layered plots [@ggnewscale]

@@ -1,0 +1,338 @@
+---
+title: "LandSat 8 March"
+author: "Jody Holland"
+format: html
+editor: visual
+bibliography: lsmodelling.bib
+---
+
+# Introduction
+
+Here the LST and NDVI from LandSat 8 at 30m resolution is calculated for March 2023. This is in a similar process to @onacillová2022; @equere2021; @son2017; @karyati2022.
+
+```{r, message=FALSE}
+# load packages
+library(tidyverse)
+library(terra)
+library(RColorBrewer)
+library(sf)
+library(leaflet)
+library(osmdata)
+```
+
+## Loading Rasters
+
+These rasters denote different bands of EM radiation captured by the LandSat 8 satellite over the south of Gran Canaria at 11:29am on the 20th March 2023 [@u.s.geologicalsurey2023]. These bands cover most of the visible light spectrum as well as the infrared spectrum. Combined in various was they can be used to calculate various measures such as the NDVI (normalised difference vegetation index) and the LST (land surface temperature).
+
+First lets plot and load the rasters
+
+```{r}
+# function to plot raster with a label and custome colour scale
+plot_rast = function(raster, label, colors) {
+  terra::plot(raster, col=colorRampPalette(colors)(100))
+  mtext(text=label, side=3, line=2)
+}
+
+# define the bounding box epsg:4083
+bbox = ext(c(437292.6282,445376.8775,3067829.6809,3072637.1023))
+
+# load each raster, crop to bounding box, and plot with label
+b2 = crop(rast("landsat_march/B2.TIF"), bbox)
+b3 = crop(rast("landsat_march/B3.TIF"), bbox)
+b4 = crop(rast("landsat_march/B4.TIF"), bbox)
+b5 = crop(rast("landsat_march/B5.TIF"), bbox)
+b6 = crop(rast("landsat_march/B6.TIF"), bbox)
+b7 = crop(rast("landsat_march/B7.TIF"), bbox)
+b10 = crop(rast("landsat_march/B10.TIF"), bbox)
+```
+
+## Loading Coast Shapefile
+
+Using OSM Data to first extract a coastline of the island
+
+```{r, warning=FALSE}
+# query osm
+gran_canaria_query = opq(bbox = "Gran Canaria") %>%
+  add_osm_feature(key = "place", value = "island") %>%
+  osmdata_sf()
+# extract the coast data
+gran_canaria_sf = gran_canaria_query$osm_multipolygons
+
+# make spatial vector
+gran_canaria_vect = st_transform(gran_canaria_sf, crs(b2)) %>%
+  vect()
+```
+
+## Masking Ocean Values
+
+```{r}
+b2 = mask(b2, gran_canaria_vect)
+b3 = mask(b3, gran_canaria_vect)
+b4 = mask(b4, gran_canaria_vect)
+b5 = mask(b5, gran_canaria_vect)
+b6 = mask(b6, gran_canaria_vect)
+b7 = mask(b7, gran_canaria_vect)
+b10 = mask(b10, gran_canaria_vect)
+```
+
+## Calculating NDVI
+
+Perhaps the most important metric beside LST is NVDI. NDVI is also used in the computation of impassivity and ultimately therefore emissivity adjusted LST.
+
+To calculate NDVI, the following formula is used:
+
+$$
+\text{NDVI} = \frac{\text{NIR} - \text{Red}}{\text{NIR} + \text{Red}}
+$$
+
+Here $NIR$ represents the Near-Infrared band reflectance value, in Landsat 8 this is Band 5. Further $Red$ represents the Red band reflectance value, in Landsat 8 this is Band 4.
+
+```{r, warning=FALSE}
+# calc and plot ndvi using bands 5 and 4
+ndvi = (b5-b4)/(b5+b4)
+
+plot_rast(ndvi,
+          "Normalised Difference Vegetation Index (NDVI)",
+          c("brown", "green"))
+```
+
+## Calculating NDBI
+
+Another important metric is NDBI as urban artificial surfaces may trap heat causing excess heating relative to vegetated surfaces.
+
+To calculate NDBI for Landsat 8, the following formula is used [@abulibdeh2021]:
+
+$$
+\text{NDVI} = \frac{\text{MIR} - \text{NIR}}{\text{MIR} + \text{NIR}}
+$$
+
+Here $NIR$ again represents the Middle-Infrared band value, in Landsat 8 this is Band 5. Also $NIR$ again represents the Near-Infrared band value, being Landsat 8 Band 5.
+
+However, we may not use this as for arid areas it has reduced efficacy. Instead we may rasterise OSM building data.
+
+```{r}
+ndbi = (b6-b5)/(b6+b5)
+
+plot_rast(ndbi,
+          "Normalised Difference Built Index (NDBI)",
+          c("lightgreen", "black"))
+```
+
+## Calculating NDWI
+
+Complementing these metrics is NDWI, here used to analyse the impact that surface water has upon the temperature.
+
+To calculate NWBI for Landsat 8, the following formula is used:
+
+$$
+\text{NDVI} = \frac{\text{Green} - \text{SWIR}}{\text{Green} + \text{SWIR}}
+$$
+
+Here $Green$ represents the Green reflectance values, in Landsat 8 this is Band 3. Also $SWIR$ again represents the Short-Infrared band value, being Landsat 8 Band 7.
+
+```{r}
+# calc and plot
+ndwi = (b3-b7)/(b3+b7)
+
+plot_rast(ndwi,
+          "Normalised Difference Water Index (NDWI)",
+          c("yellow", "blue"))
+```
+
+## Calculating Surface Albedo
+
+There is also surface albedo $\alpha$, which is the the fraction of the reflected shortwave radiation, is calculated using the following formula [@equere2021]:
+
+$$
+\alpha = \frac{0.356·\text{Blue} + 0.0130 · \text{Red} + 0.373 · \text{NIR} + 0.085 * \text{MIR} + 0.072 · \text{SWIR} - 0.0018}{1.016}
+$$
+
+Here $Blue$ represents the Blue reflectance values, in Landsat 8 this is Band 2. $Red$ again represents the Red band value, being Landsat 8 Band 4. $NIR$ represents the Near-Infrared values, in Landsat 8 this is Band 5. $MIR$ likewise represents the Middle-Infrared values, being Landsat 8 Band 6. Finally $SWIR$ represents the Near-Infrared values, in Landsat 8 this is Band 7.
+
+```{r}
+
+# calc and plot
+albedo = (0.356*b2+0.0130*b4+0.373*b5+0.085*b6+0.072*b7-0.0018)/1.016
+
+plot_rast(albedo,
+          expression(paste("Surface Albedo (", alpha,")")),
+          c("pink", "blue"))
+```
+
+## Calculating LST
+
+Calculating LST can be straightforward in principle, using Band 10 alone of Landsat 8 data. However, this will not account for surface emissivity. Thus, for this study, an adjusted LST is calculated.
+
+### Top of Atmosphere Spectral Radiance
+
+The first step is to convert the Digital Numbers $DN$ in the Band 10 layer to Top of Atmosphere Spectral Radiance $L_\lambda$ values. This process uses input units found the images metadata/MLT file. These values are the RADIANCE_MULT_BAND_10 $M_L$ and the RADIANCE_ADD_BAND_10 $\text{A}_L$.
+
+Putting these together into a formula is as follows:
+
+$$
+\text{L}_\lambda = \text{M}_L · \text{DN} + \text{A}_L
+$$
+
+```{r}
+# define metadata values
+mult_b10 = 3.8e-04
+add_b10 = 0.1
+
+# calc and plot
+l = (mult_b10*b10+add_b10)
+
+plot_rast(l,
+          expression(Spectral~Radiance~(L[lambda])),
+          c("brown", "yellow"))
+```
+
+### At-Sensor Temperature
+
+The second step is "Conversion of Radiance to At-Sensor Temperature" [@karyati2022]. This This converts the Spectral Radiance into temperature values or Brightness Temperature $BT$ in Kelvin. This process requires two constants related to Landsat 8 Band 10's specific thermal conversion constants found again in the metadata file. These are $K1$and $K2$.
+
+Putting this together into a formula is as follows:
+
+$$
+\text{BT} = \frac{\text{K2}}{ln(\frac{\text{K1}}{\text{L}_\lambda} + 1)} 
+$$
+
+```{r}
+# add effective wavelength of landsat b10
+k1 = 799.0284
+k2 = 1329.2405
+
+# calc and plot
+bt = (k2/log(k1/l+1))
+
+plot_rast(bt,
+          expression(Brightness~Temp~(BT)),
+          c("blue", "red")) 
+```
+
+### Surface Level Emissivity
+
+The above metric alone could be used for study of heat distribution, however it does not account for the variation caused by surface level emissivity. Emissivity denotes how much infrared a surface will absorb or reflect, ranging from a mirror to a perfect black surface. The values of emissivity range from 0 to 1 respectively.
+
+#### Fractional Vegetation Factor
+
+NDVI is used to determine emissivity, through the fractional vegetation factor $\text{P}_v$. This value is specific to the region being studied.
+
+The formula for calculating fractional vegetation factor is as follows:
+
+$$
+\text{P}_v = \left( \frac{\text{NDVI} - \text{NDVI}_{\min}}{\text{NDVI}_{\max} - \text{NDVI}_{\min}} \right)^2
+$$
+
+```{r}
+# define min and max ndvi
+min_ndvi = global(ndvi, fun=min, na.rm=TRUE) %>%
+  as.numeric()
+max_ndvi = global(ndvi, fun=max, na.rm=TRUE) %>%
+  as.numeric()
+
+# calc and plot vegetation factor
+pv = ((ndvi-min_ndvi)/(max_ndvi-min_ndvi))^2
+
+plot_rast(pv,
+          expression(Fractional~Vegetation~Factor~(P[v])),
+          c("maroon", "green"))
+```
+
+#### Emissivity
+
+From this the surface emissivity can be calculated. This uses two constants relating to the relative emissivity of soil $\epsilon\text{s}\lambda$ and the emissivity of vegetation $\epsilon\text{v}\lambda$, as well as one surface roughness $\text{C}\lambda$ metric of 0.005
+
+The formula for estimating emissivity $\epsilon\lambda$ is thus as follows:
+
+$$
+\epsilon\lambda = \epsilon\text{v}\lambda + \epsilon\text{s}\lambda  · (1 - \text{P}_v) + \text{C}\lambda
+$$
+
+```{r}
+# soil emissivity
+es = 0.964
+
+# veg emissivity
+ev = 0.984
+
+# calc and plot emissivity
+e =  ev*pv+es*(1-pv)+0.005
+
+plot_rast(e,
+          expression(Emissivity~(epsilon*lambda)),
+          c("yellow", "darkgreen"))
+```
+
+### Correction Constant
+
+Now most of the building blocks are in place to calculate the adjusted LST. This requires a correction constant $\rho$ that incorporates the Speed of Light $c$, Planck's constant $h$, and Boltzmann's constant $\sigma$.
+
+The formula for this is as follows:
+
+$$
+\rho = \frac{c·h}{\sigma}
+$$
+
+```{r}
+# speed of light
+c = 2.997925e8 
+
+# planck's constant
+h = 6.626070e-34
+
+# boltzmann's constant
+sigma = 1.380649e-23
+
+# calc and output correction constant/rho 
+rho = c*h/sigma
+rho
+```
+
+### Land Surface Temperature
+
+With these building blocks, plus the wavelength of the emitted radiance for Landsat 8 $\lambda$, the adjusted LST $\text{T}s$ can be determined using the following formula (converting from Kelvin to Celcius:
+
+$$
+\text{T}_s = \frac{\text{BT}}{1 + (\frac{\lambda\text{BT}}{\rho} · ln(\epsilon\lambda))} - 273.15
+$$
+
+```{r}
+# wavelength
+wl = 10.895e-6
+
+# calc and plot
+ts = bt/(1+(wl*bt/rho)*log(e))-273.15
+
+plot_rast(ts,
+          expression(Land~Surface~Temperature~(T[s])), c("blue", "red"))
+```
+
+#### Leaflet Visualisation of LST
+
+Using the Leaflet Package for R [@leaflet], we can visualise the resulting rast
+
+```{r}
+plet(ts,
+     col=(c("darkblue","pink")),
+     legend="bottomright",
+     main="LST (Cº)",
+     tiles=c("Esri.WorldImagery"))
+
+```
+
+## Stack and Export
+
+```{r}
+stack = c(ndvi, ndbi, ndwi, albedo, ts)
+
+data_df = na.omit(as.data.frame(stack, xy=TRUE))
+
+data_df$month = "march"
+
+names(data_df) = c("X", "Y", 
+                   "NDVI","NDBI",
+                   "NDWI", "Albedo", "TS",
+                   "Month")
+
+write_csv(data_df, "march.csv")
+```

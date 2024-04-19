@@ -2,5 +2,11 @@
 .Rhistory
 .RData
 .Ruserdata
-
 /.quarto/
+landsat_january
+landsat_july
+landsat_march
+landsat_may
+landsat_november
+landsat_september
+githubtoken

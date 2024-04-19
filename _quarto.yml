@@ -8,11 +8,24 @@ website:
     left:
       - href: index.qmd
         text: Home
-      - href: lsmodelling.qmd
-        text: LandSat 8 Modelling
-      - href: lsmodelling_pdf.pdf
-        text: LandSat 8 Modelling PDF
-
+      - href: modelling.qmd
+        text: Statistical Modelling
+      - href: control_variables.qmd
+        text: Control Variables
+      - text: Monthly LST
+        menu:
+          - href: lsjanuary.qmd
+            text: January
+          - href: lsmarch.qmd
+            text: March 
+          - href: lsmay.qmd
+            text: May             
+          - href: lsjuly.qmd
+            text: July
+          - href: lsseptember.qmd
+            text: September 
+          - href: lsnovember.qmd
+            text: November
 format:
   html:
     theme:

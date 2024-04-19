@@ -1,0 +1,348 @@
+---
+title: "LandSat 8, TS, & Modelling"
+author: "Jody Holland"
+format: html
+editor: visual
+bibliography: lsmodelling.bib
+---
+
+# Introduction
+
+Here I train a variety of models predicting and understanding TS using LandSat 8 at 30m resolution. This is in a similar process to @onacillová2022; @son2017; @karyati2022. In this modelling process we employ two families of modelling approaches:
+
+-   Linear Regression [@onacillová2022]
+
+```{r, message=FALSE}
+# load packages
+library(tidyverse)
+library(terra)
+library(RColorBrewer)
+library(sf)
+library(leaflet)
+library(osmdata)
+library(modelsummary)
+library(ggnewscale)
+library(nnet)
+library(car)
+```
+
+# Loading and Binding
+
+In this section I load the control variables and the monthly TS data as the basis for model training. I also create a dataset of the average TS, NDVI, and NDWI across the year.
+
+```{r}
+jan = read.csv("january.csv")
+march = read.csv("march.csv")
+may = read.csv("may.csv")
+july = read.csv("july.csv")
+sept = read.csv("september.csv")
+nov = read.csv("november.csv")
+
+# bind together
+month_data = rbind(jan, march, may, july, sept, nov)
+
+# load control data and join
+controls = read.csv("control_variables.csv")
+total_data = left_join(month_data, controls,
+                       by = c("X" = "X",
+                             "Y" = "Y"))
+
+# calc average ndvi, ndwi, albedo, TS
+mean_data = month_data %>%
+  group_by(X, Y) %>%
+  summarise(NDVI = mean(NDVI),
+            NDWI = mean(NDWI),
+            Albedo = mean(Albedo),
+            TS = mean(TS),
+            .groups = "drop")
+mean_data = left_join(mean_data, controls,
+                      by = c("X" = "X",
+                             "Y" = "Y"))
+
+month_temo = month_data %>%
+  group_by(Month) %>%
+  summarise(Temp = mean(TS))
+```
+
+# Model Building
+
+Now that I have gathered the data, the next step is to develop several models to predict Land Surface Temperature based on our environmental inputs.
+
+## General Linear Models
+
+The first GLM model is simply multivariate linear regression fitted within a OLS framework.
+
+### Fitting the Model
+
+The formula for this model is:
+
+Where $i$ denotes the individual 30m raster tiles and $\epsilon$ denotes the residual error not accounted for.
+
+Also, there is analysis of a potential interaction effect between tourism and building exposure, as the types of built up area may vary as we move from a tourism heavy area, thus also adding the following term to the OLS function.
+
+I also make a fixed effect model with weights for the month.
+
+```{r}
+# compute models
+model_ols1 = lm(TS ~ 
+                 TourismExposure +
+                 BuildingExposure +
+                 Albedo +
+                 NDVI +
+                 NDWI +
+                 CoastDistance +
+                 Elevation,
+               data = mean_data)
+summary(model_ols1)
+vif(model_ols1)
+par(mfrow=c(2,2))
+plot(model_ols1)
+
+# with an interaction term
+model_ols2 = lm(TS ~ 
+                 TourismExposure * BuildingExposure +
+                 NDVI +
+                 Albedo +
+                 NDWI +
+                 CoastDistance +
+                 Elevation,
+               data = mean_data)
+
+summary(model_ols2)
+vif(model_ols2)
+par(mfrow=c(2,2))
+plot(model_ols2)
+
+# define a threshold for high and low tourism exposure
+threshold = 0
+
+# split the dataset
+high_tourism = subset(mean_data, TourismExposure > threshold)
+low_tourism = subset(mean_data, TourismExposure <= threshold)
+
+# fit separate models for high and low tourism exposure areas
+model_high = lm(TS ~ BuildingExposure + Albedo + NDVI + NDWI + CoastDistance + Elevation, data = high_tourism)
+model_low = lm(TS ~ BuildingExposure + Albedo + NDVI + NDWI + CoastDistance + Elevation, data = low_tourism)
+
+# compare summaries
+summary(model_high)
+summary(model_low)
+```
+
+### Plot Fit Key Linear Models
+
+```{r}
+scatterplot = all_density_plot = ggplot() +
+  geom_point(data = mean_data,
+             aes(x = BuildingExposure,
+                 y = TS,
+                 colour = TourismExposure), 
+             alpha = 0.03) +
+  scale_color_viridis_b() +
+  labs(title = "Effects of Building Concentration on Land Surface Temperature",
+       subtitle = "All Building Concentrations,
+Maspalomas/Playa del Inglés region of Gran Canaria",
+       caption = "Model Based on LandSat Imagery from 2023",
+       x = "Building Concentration Index",
+       y = "Land Surface Temperature ºC")
+scatterplot
+```
+
+```{r}
+# all building concentrations 
+tourism_dense = tibble(
+  NDVI = mean(high_tourism$NDVI),
+  BuildingExposure = seq(min(high_tourism$BuildingExposure),
+                         max(high_tourism$BuildingExposure),
+                         by = 0.05),
+  Albedo = mean(high_tourism$Albedo),
+  NDWI = mean(high_tourism$NDWI),
+  CoastDistance = mean(high_tourism$CoastDistance),
+  Elevation = mean(high_tourism$Elevation)
+)
+
+tourism_sparse = tibble(
+  NDVI = mean(low_tourism$NDVI),
+  BuildingExposure = seq(min(low_tourism$BuildingExposure),
+                         max(low_tourism$BuildingExposure),
+                         by = 0.05),
+  Albedo = mean(low_tourism$Albedo),
+  NDWI = mean(low_tourism$NDWI),
+  CoastDistance = mean(low_tourism$CoastDistance),
+  Elevation = mean(low_tourism$Elevation)
+)
+
+# predict values
+tourism_dense_predictions = predict(
+  model_high,
+  newdata = tourism_dense,
+  se.fit = TRUE,
+  interval = "confidence"
+) %>% 
+  as.data.frame() %>%
+  bind_cols(tourism_dense) %>%
+  select(c("fit.fit", "fit.lwr", "fit.upr", "BuildingExposure"))
+tourism_dense_predictions$area = "High Tourism"
+
+tourism_sparse_predictions = predict(
+  model_low,
+  newdata = tourism_sparse,
+  se.fit = TRUE,
+  interval = "confidence"
+) %>% 
+  as.data.frame() %>%
+  bind_cols(tourism_sparse) %>%
+  select(c("fit.fit", "fit.lwr", "fit.upr", "BuildingExposure"))
+tourism_sparse_predictions$area = "Low Tourism"
+
+# bind into toplot
+toplot = rbind(tourism_dense_predictions,
+               tourism_sparse_predictions)
+
+# comparison plot
+
+all_density_plot = ggplot() +
+  geom_line(data = toplot,
+            aes(x = BuildingExposure,
+                y = fit.fit,
+                colour = area),
+            alpha = 2) +
+  scale_colour_manual(values = c("Low Tourism" = "blue", "High Tourism" = "red"),
+                      name = "Area Type") +
+  geom_point(data = high_tourism,
+             aes(x = BuildingExposure,
+                 y = TS),
+             colour = "pink",
+             alpha = 0.03) +
+  geom_point(data = low_tourism,
+             aes(x = BuildingExposure,
+                 y = TS),
+             colour = "lightblue",
+             alpha = 0.03) +
+  labs(title = "Effects of Building Concentration on Land Surface Temperature",
+       subtitle = "All Building Concentrations,
+Maspalomas/Playa del Inglés region of Gran Canaria",
+       caption = "Model Based on LandSat Imagery from 2023",
+       x = "Building Concentration Index",
+       y = "Predicted Land Surface Temperature ºC")
+
+all_density_plot
+```
+
+## Polynominal Interaction Modeling
+
+```{r}
+model_poly_interaction = lm(TS ~ 
+                             BuildingExposure + I(BuildingExposure^2) +
+                             TourismExposure + I(TourismExposure^2) +
+                             Albedo + NDVI + NDWI +
+                             CoastDistance + Elevation +
+                             BuildingExposure:TourismExposure +
+                             BuildingExposure:Albedo +
+                             BuildingExposure:NDVI +
+                             BuildingExposure:NDWI +
+                             TourismExposure:Albedo +
+                             TourismExposure:NDVI +
+                             TourismExposure:NDWI,
+                           data = mean_data)
+
+# Summary of the polynomial model with interactions
+summary(model_poly_interaction)
+```
+
+```{r}
+# all building concentrations, polynominal 
+tourism_area = tibble(
+  TourismExposure = 3,
+  NDVI = mean(total_data$NDVI),
+  BuildingExposure = seq(min(total_data$BuildingExposure),
+                         max(total_data$BuildingExposure),
+                         by = 0.05),
+  Albedo = mean(total_data$Albedo),
+  NDWI = mean(total_data$NDWI),
+  CoastDistance = mean(total_data$CoastDistance),
+  Elevation = mean(total_data$Elevation)
+)
+
+residence_area = tibble(
+  TourismExposure = -0.6,
+  NDVI = mean(total_data$NDVI),
+  BuildingExposure = seq(min(total_data$BuildingExposure),
+                         max(total_data$BuildingExposure),
+                         by = 0.05),
+  Albedo = mean(total_data$Albedo),
+  NDWI = mean(total_data$NDWI),
+  CoastDistance = mean(total_data$CoastDistance),
+  Elevation = mean(total_data$Elevation)
+)
+
+# bind together
+scenario = rbind(tourism_area, residence_area)
+
+# predict values
+area_predictions = predict(
+  model_poly_interaction,
+  newdata = scenario,
+  se.fit = TRUE,
+  interval = "confidence"
+)
+
+# make tibble
+area_predictions = area_predictions$fit %>% 
+  as_tibble()
+
+# make toplot
+toplot = bind_cols(scenario,
+                   area_predictions)
+
+toplot = select(toplot, c("fit", "lwr", "upr",
+                          "BuildingExposure",
+                          "TourismExposure"))
+
+toplot$area = ifelse(toplot$TourismExposure == -0.6, "Residence",
+                     "Tourist")
+
+# plot polynominals
+
+poly_density_plot_lines = ggplot(data = toplot,
+                                 aes(x = BuildingExposure,
+                                     y = fit,
+                                     ymin = lwr,
+                                     ymax = upr,
+                                     fill = area)) +
+  geom_line(alpha = 2) +
+  geom_ribbon(alpha = 0.5) +
+  scale_fill_manual(values = c("Residence" = "blue", "Tourist" = "red"),
+                      name = "Area Type") +
+  labs(title = "Effects of Building Concentration on Land Surface Temperature",
+       subtitle = "All Building Concentrations,
+Maspalomas/Playa del Inglés region of Gran Canaria",
+       caption = "Model Based on LandSat Imagery from 2023",
+       x = "Building Concentration Index",
+       y = "Land Surface Temperature ºC")
+
+poly_density_plot_points = ggplot() +
+  geom_line(data = toplot,
+            aes(x = BuildingExposure,
+                y = fit,
+                colour = area),
+            alpha = 2) +
+  scale_colour_manual(values = c("Residence" = "blue", "Tourist" = "red"),
+                      name = "Area Type") +
+  new_scale_color() +
+  geom_point(data = mean_data,
+             aes(x = BuildingExposure,
+                 y = TS,
+                 colour = TourismExposure),
+             alpha = 0.02) +
+  scale_color_viridis_c(name = "Tourism Concentration") +
+  labs(title = "Effects of Building Concentration on Land Surface Temperature",
+       subtitle = "All Building Concentrations,
+Maspalomas/Playa del Inglés region of Gran Canaria",
+       caption = "Model Based on LandSat Imagery from 2023",
+       x = "Building Concentration Index",
+       y = "Land Surface Temperature ºC")
+
+poly_density_plot_lines
+poly_density_plot_points
+```
