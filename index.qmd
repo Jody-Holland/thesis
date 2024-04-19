@@ -11,6 +11,12 @@ Welcome/Bienvenido to the central repository for my thesis project, which casts 
 
 This platform serves as a comprehensive archive of the data analysis undertaken for project. Much of this is completed using R and Python, working within a GIS framework for these languages. Through innovative methodologies, this project operationalises a variety of remote sensing data sources from the LandSat 8 satellite to explore the distribution of surface temperatures on a micro-climate scale, juxtaposing these findings against the backdrop of local environmental justice and urban inequality concerns.
 
+# About me
+
+I am a 24 year old Master's Student on the MSc Islands and Sustainability programme. This is an Eramus Mundus Master's programme based in four locations across Europe. I have been studying at the Unviersity of Groningen and the University of Las Palmas de Gran Canaria. My specialisms include GIS, Urban Justice, Tourism Studies, and Remote Sensing.
+
+![](images/Screenshot 2024-04-19 at 15-39-39 Jody Holland (@jholldy) • Instagram photos and videos.png){fig-align="center"}
+
 # Preparing Data
 
 For this analysis, I aim use the following input data covering and clipped to the study area of Maspalomas-Playa del Inglés.
